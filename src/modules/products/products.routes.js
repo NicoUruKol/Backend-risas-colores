@@ -1,0 +1,20 @@
+import { Router } from "express";
+import {
+    getProducts,
+    getProductById,
+    createProduct,
+    updateProduct,
+    deleteProduct,
+} from "./products.controller.js";
+
+const router = Router();
+
+router.get("/", getProducts);
+router.get("/:id", getProductById);
+
+// CRUD (por ahora sin auth)
+router.post("/", createProduct);
+router.put("/:id", updateProduct);
+router.delete("/:id", deleteProduct);
+
+export default router;
