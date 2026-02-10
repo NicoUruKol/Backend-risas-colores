@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { requireAdmin } from "../../middlewares/auth.middleware.js";
+
 import {
     getProducts,
     getProductById,
@@ -12,9 +14,10 @@ const router = Router();
 router.get("/", getProducts);
 router.get("/:id", getProductById);
 
-// CRUD (por ahora sin auth)
-router.post("/", createProduct);
-router.put("/:id", updateProduct);
-router.delete("/:id", deleteProduct);
+// CRUD (con auth)
+router.post("/", requireAdmin, createProduct);
+router.put("/:id", requireAdmin, updateProduct);
+router.delete("/:id", requireAdmin, deleteProduct);
+
 
 export default router;

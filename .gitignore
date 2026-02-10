@@ -46,3 +46,7 @@ logs/
 .cache/
 .tmp/
 .temp/
+# =========================
+# Keys
+# =========================
+serviceAccountKey.json

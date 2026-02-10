@@ -1,8 +1,10 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import authRouter from "./src/modules/auth/auth.routes.js";
 
-import productsRouter from "./src/modules/products/products.routes";
+
+import productsRouter from "./src/modules/products/products.routes.js";
 
 const app = express();
 
@@ -13,21 +15,24 @@ app.get("/", (req, res) => {
     res.status(200).send("✅ Backend Risas y Colores online. Usá /api/products");
 });
 
-// ✅ Products (IMPORTANTE: antes del 404)
+// 🔐 Auth primero
+app.use("/api/auth", authRouter);
+
+// 🧺 Products
 app.use("/api/products", productsRouter);
 
-// ✅ Log de rutas (para ver qué estás pegando)
+// 🧪 Log
 app.use((req, res, next) => {
     console.log("➡️", req.method, req.url);
     next();
 });
 
-// ✅ 404 al final SIEMPRE
+// ❌ 404
 app.use((req, res) => {
     res.status(404).json({ ok: false, message: "Ruta no encontrada" });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, () => {
     console.log(`✅ API corriendo en http://localhost:${PORT}`);
 });
