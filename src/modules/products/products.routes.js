@@ -7,6 +7,7 @@ import {
     createProduct,
     updateProduct,
     deleteProduct,
+    adjustProductStock
 } from "./products.controller.js";
 
 const router = Router();
@@ -18,6 +19,8 @@ router.get("/:id", getProductById);
 router.post("/", requireAdmin, createProduct);
 router.put("/:id", requireAdmin, updateProduct);
 router.delete("/:id", requireAdmin, deleteProduct);
+router.patch("/:id/stock", requireAdmin, adjustProductStock);
+
 
 
 export default router;

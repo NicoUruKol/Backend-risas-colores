@@ -8,7 +8,7 @@ export const getProducts = async (req, res, next) => {
         active: req.query.active,
         };
 
-        const data = await productsService.list(filters);
+        const data = await productsService.list(req.query || {});
         return res.status(200).json({ ok: true, data });
     } catch (err) {
         next(err);
@@ -39,7 +39,7 @@ export const createProduct = async (req, res, next) => {
         return res.status(400).json({ ok: false, message: err.message, details: err.details });
         }
         if (err.code === "DUPLICATE_ID") {
-        return res.status(409).json({ ok: false, message: err.message });
+        return res.status(409).json({ ok: false, code: err.code, message: err.message });
         }
         next(err);
     }
@@ -77,3 +77,21 @@ export const createProduct = async (req, res, next) => {
         next(err);
     }
 };
+
+export const adjustProductStock = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const updated = await productsService.adjustStock(id, req.body, req.user?.email || "admin");
+
+        if (!updated) {
+        return res.status(404).json({ ok: false, message: "Producto no encontrado" });
+        }
+
+        return res.status(200).json({ ok: true, data: updated });
+    } catch (err) {
+        if (err.code === "VALIDATION_ERROR") {
+        return res.status(400).json({ ok: false, message: err.message, details: err.details });
+        }
+        next(err);
+    }
+    };
