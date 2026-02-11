@@ -77,12 +77,12 @@ export const createPaymentPreference = async (order) => {
         auto_return: "approved",
     };
 
-    //const response = await mpPreference.create({ body: preference });
-    //return response;
-        return {
-            id: "fake-preference-id",
-            init_point: "http://localhost:5173/fake-checkout"
-            };
+    const response = await mpPreference.create({ body: preference });
+    return response;
+    //    return {
+    //        id: "fake-preference-id",
+    //        init_point: "http://localhost:5173/fake-checkout"
+    //        };
 };
 
 
