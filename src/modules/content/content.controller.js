@@ -8,7 +8,7 @@ import {
 export async function getHomeHero(req, res, next) {
     try {
         const data = await getHomeHeroPublic();
-        return res.json({ ok: true, ...data });
+        return res.json({ ok: true, data });
     } catch (e) {
         next(e);
     }
@@ -17,7 +17,7 @@ export async function getHomeHero(req, res, next) {
 export async function getElJardinGallery(req, res, next) {
     try {
         const data = await getElJardinGalleryPublic();
-        return res.json({ ok: true, ...data });
+        return res.json({ ok: true, data });
     } catch (e) {
         next(e);
     }

@@ -1,4 +1,3 @@
-// src/modules/media/media.service.js
 import cloudinary from "../../config/cloudinary.js";
 
 export const ALLOWED_FOLDERS = new Set([
