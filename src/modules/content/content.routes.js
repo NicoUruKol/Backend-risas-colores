@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAdmin } from "../../middlewares/requireAdmin.js";
+import { requireAdmin } from "../../middlewares/auth.middleware.js";
 
 import {
     getHomeHero,

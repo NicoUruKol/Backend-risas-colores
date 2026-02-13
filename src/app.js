@@ -15,7 +15,31 @@ import { errorHandler } from "./middlewares/error.middleware.js";
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://risas-colores.vercel.app",
+];
+
+app.use(
+    cors({
+        origin: (origin, cb) => {
+        // Permite requests sin Origin (Postman, server-to-server, health checks)
+        if (!origin) return cb(null, true);
+
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error(`CORS blocked: ${origin}`));
+        },
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+    })
+);
+
+// Importante para preflight
+app.options(/.*/, cors());
+
+
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -37,7 +61,10 @@ app.use((req, res, next) => {
     next();
 });
 
+// pagos
 app.use("/api/payments", paymentsRouter);
+
+// resgistra movimiento
 app.use("/api/stock-movements", stockMovementsRouter);
 
 // 🖼️ Media (Cloudinary) - Admin
