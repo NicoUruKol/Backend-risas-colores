@@ -3,7 +3,7 @@ import cloudinary from "../../config/cloudinary.js";
 export const ALLOWED_FOLDERS = new Set([
     "risas-colores/web/Hero",
     "risas-colores/web/gallery",
-    "risas-colores/web/products",
+    "risas-colores/products",
 ]);
 
 export function assertAllowedFolder(folder) {
