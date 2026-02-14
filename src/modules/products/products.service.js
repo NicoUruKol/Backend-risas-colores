@@ -1,4 +1,5 @@
 import { db } from "../../config/firebase.js";
+import { FieldValue } from "../../config/firebase.js";
 
 const COL = "products";
 
@@ -205,41 +206,6 @@ export const update = async (id, patch) => {
 
     const { id: _ignore, ...rest } = patch || {};
 
-      // 🚫 Bloquear cambios de stock por PUT
-    if ("variants" in rest) {
-        const incoming = Array.isArray(rest.variants) ? rest.variants : null;
-    if (!incoming) {
-        throw makeError("variants debe ser un array", "VALIDATION_ERROR", ["variants debe ser un array"]);
-    }
-
-    const current = doc.data()?.variants;
-    const currentArr = Array.isArray(current) ? current : [];
-
-    const curMap = new Map(currentArr.map((v) => [String(v?.size ?? "").trim(), Number(v?.stock ?? 0)]));
-    const problems = [];
-
-    for (let i = 0; i < incoming.length; i++) {
-        const size = String(incoming[i]?.size ?? "").trim();
-        if (!size) continue;
-
-        const nextStock = incoming[i]?.stock;
-
-        // si viene stock en el payload, lo comparamos con el actual
-        if (nextStock !== undefined) {
-            const prevStock = curMap.get(size);
-            if (prevStock === undefined) {
-            problems.push(`No se puede setear stock para talle inexistente (${size}) desde PUT`);
-            } else if (Number(nextStock) !== Number(prevStock)) {
-            problems.push(`No se permite modificar stock por PUT (talle ${size}). Usá el endpoint de stock.`);
-            }
-        }
-        }
-
-        if (problems.length) {
-        throw makeError("No se permite modificar stock por PUT", "VALIDATION_ERROR", problems);
-        }
-    }
-
     if ("variants" in rest) {
         rest.variants = validateAndNormalizeVariants(rest.variants);
     }
@@ -314,7 +280,7 @@ export const adjustStock = async (id, payload, actor = "admin") => {
 
         const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
         tx.set(movRef, {
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         type: "admin_adjust",
         orderId: null,
         productCode: docId,

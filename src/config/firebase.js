@@ -2,6 +2,8 @@ import "dotenv/config";
 import admin from "firebase-admin";
 import fs from "fs";
 
+
+
 function loadServiceAccount() {
     // 1) Vercel-friendly (recomendado): JSON en base64
     const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
@@ -43,4 +45,6 @@ if (!admin.apps.length) {
 }
 
 export const db = admin.firestore();
+export const FieldValue = admin.firestore.FieldValue;
+
 

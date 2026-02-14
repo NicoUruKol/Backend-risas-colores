@@ -81,7 +81,12 @@ export const createProduct = async (req, res, next) => {
 export const adjustProductStock = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const updated = await productsService.adjustStock(id, req.body, req.user?.email || "admin");
+        const updated = await productsService.adjustStock(
+            id,
+            req.body,
+            req.admin?.email || "admin"
+            );
+
 
         if (!updated) {
         return res.status(404).json({ ok: false, message: "Producto no encontrado" });
