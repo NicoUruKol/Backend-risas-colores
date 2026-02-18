@@ -187,6 +187,21 @@ export const create = async (payload) => {
 };
 
 /* ==============================
+Get by docId (ADMIN)
+- NO oculta talles sin stock
+- NO devuelve null si stock=0
+============================== */
+export const getByIdAdmin = async (id) => {
+    const docId = normalizeId(id);
+    const doc = await db.collection(COL).doc(docId).get();
+    if (!doc.exists) return null;
+
+    // Devuelve todo tal cual está en Firestore
+    return { id: doc.id, ...doc.data() };
+};
+
+
+/* ==============================
 Update
 - No permite cambiar id
 - Valida variants si vienen

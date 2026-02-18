@@ -100,3 +100,21 @@ export const adjustProductStock = async (req, res, next) => {
         next(err);
     }
     };
+
+export const getProductByIdAdmin = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        // usa el nuevo service admin
+        const product = await productsService.getByIdAdmin(id);
+
+        if (!product) {
+        return res.status(404).json({ ok: false, message: "Producto no encontrado" });
+        }
+
+        return res.status(200).json({ ok: true, data: product });
+    } catch (err) {
+        next(err);
+    }
+};
+
