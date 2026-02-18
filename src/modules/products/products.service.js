@@ -198,6 +198,7 @@ export const update = async (id, patch) => {
     const doc = await ref.get();
     if (!doc.exists) return null;
 
+    // No permite cambiar id
     if (patch?.id && normalizeId(patch.id) !== docId) {
         throw makeError("No se permite cambiar el id del producto", "VALIDATION_ERROR", [
         "id no es editable",
@@ -206,8 +207,34 @@ export const update = async (id, patch) => {
 
     const { id: _ignore, ...rest } = patch || {};
 
+    // ✅ Si viene variants por PUT, actualizo precio/estructura pero PRESERVO el stock actual
     if ("variants" in rest) {
-        rest.variants = validateAndNormalizeVariants(rest.variants);
+        const current = doc.data() || {};
+        const currentVariants = Array.isArray(current?.variants) ? current.variants : [];
+
+        // Mapa: size -> stock actual
+        const currentStockBySize = new Map(
+        currentVariants
+            .map((v) => [String(v?.size ?? "").trim(), Number(v?.stock ?? 0)])
+            .filter(([size]) => Boolean(size))
+        );
+
+        const incoming = Array.isArray(rest.variants) ? rest.variants : [];
+
+        const incomingWithPreservedStock = incoming.map((v) => {
+        const size = String(v?.size ?? "").trim();
+
+        // si existe en el producto actual, se preserva ese stock
+        // si no existe (caso raro), cae al stock que venga (o 0)
+        const preservedStock = currentStockBySize.has(size)
+            ? currentStockBySize.get(size)
+            : Number(v?.stock ?? 0);
+
+        return { ...v, stock: preservedStock };
+        });
+
+        // valida y normaliza (talles, price>0, stock entero >=0, orden, etc.)
+        rest.variants = validateAndNormalizeVariants(incomingWithPreservedStock);
     }
 
     await ref.set(rest, { merge: true });
@@ -235,6 +262,10 @@ export const remove = async (id) => {
 
 export const adjustStock = async (id, payload, actor = "admin") => {
     const docId = normalizeId(id);
+    const ref = db.collection(COL).doc(docId);
+
+    const doc = await ref.get();
+        if (!doc.exists) return null;
 
     const size = (payload?.size ?? "").toString().trim();
     const delta = Number(payload?.delta);
