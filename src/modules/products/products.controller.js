@@ -2,13 +2,18 @@ import * as productsService from "./products.service.js";
 
 export const getProducts = async (req, res, next) => {
     try {
+        const isAdmin = Boolean(req.admin);
+
         const filters = {
         q: req.query.q || "",
         type: req.query.type || "",
-        active: req.query.active,
+        active:
+            isAdmin && (req.query.active === undefined || req.query.active === "" || req.query.active === null)
+            ? "all"
+            : req.query.active,
         };
 
-        const data = await productsService.list(req.query || {});
+        const data = await productsService.list(filters);
         return res.status(200).json({ ok: true, data });
     } catch (err) {
         next(err);

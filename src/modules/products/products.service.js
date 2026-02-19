@@ -95,14 +95,19 @@ export const list = async (filters = {}) => {
 
     let ref = db.collection(COL);
 
-    // ✅ por defecto: solo activos
+    // ✅ active:
+    // - undefined -> solo activos (comportamiento público actual)
+    // - "true" / "false" -> filtra
+    // - "all" -> no filtra (para admin)
     if (active === undefined || active === "" || active === null) {
         ref = ref.where("active", "==", true);
-    } else if (active === "true") {
+        } else if (active === "true") {
         ref = ref.where("active", "==", true);
-    } else if (active === "false") {
+        } else if (active === "false") {
         ref = ref.where("active", "==", false);
-    }
+        } else if (active === "all") {
+        // no aplica filtro por active
+        }
 
     if (type) ref = ref.where("type", "==", type);
 
