@@ -31,7 +31,8 @@ const validateAndNormalizeVariants = (variants) => {
     }
 
     const normalized = variants.map((v, i) => {
-        const size = (v?.size ?? "").toString().trim();
+        let size = (v?.size ?? "").toString().trim();
+            if (size.toLowerCase() === "único" || size.toLowerCase() === "unico") size = "U"
         const price = Number(v?.price);
         const stock = Number(v?.stock);
 
