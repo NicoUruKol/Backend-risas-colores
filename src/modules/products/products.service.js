@@ -303,35 +303,38 @@ export const adjustStock = async (id, payload, actor = "admin") => {
     const productRef = db.collection(COL).doc(docId);
 
     const result = await db.runTransaction(async (tx) => {
-        const snap = await tx.get(productRef);
-        if (!snap.exists) return null;
+    const snap = await tx.get(productRef);
+    if (!snap.exists) return null;
 
-        const product = snap.data();
-        const variants = Array.isArray(product?.variants) ? product.variants : [];
-        const vIndex = variants.findIndex((v) => (v?.size ?? "").toString().trim() === size);
+    const product = snap.data();
+    const variants = Array.isArray(product?.variants) ? product.variants : [];
+    const vIndex = variants.findIndex((v) => (v?.size ?? "").toString().trim() === size);
 
-        if (vIndex === -1) {
-        throw makeError("Talle no encontrado", "VALIDATION_ERROR", [`size ${size} no existe en el producto`]);
-        }
-
-        const stockBefore = Number(variants[vIndex]?.stock ?? 0);
-        const stockAfter = stockBefore + delta;
-
-        if (!Number.isInteger(stockAfter) || stockAfter < 0) {
-        throw makeError("Stock insuficiente para aplicar el ajuste", "VALIDATION_ERROR", [
-            `stock actual: ${stockBefore}, delta: ${delta}`,
+    if (vIndex === -1) {
+        throw makeError("Talle no encontrado", "VALIDATION_ERROR", [
+        `size ${size} no existe en el producto`,
         ]);
-        }
+    }
 
-        const updatedVariants = variants.map((v, i) => {
+    const stockBefore = Number(variants[vIndex]?.stock ?? 0);
+    const stockAfter = stockBefore + delta;
+
+    if (!Number.isInteger(stockAfter) || stockAfter < 0) {
+        throw makeError("Stock insuficiente para aplicar el ajuste", "VALIDATION_ERROR", [
+        `stock actual: ${stockBefore}, delta: ${delta}`,
+        ]);
+    }
+
+    const updatedVariants = variants.map((v, i) => {
         if (i !== vIndex) return v;
         return { ...v, stock: stockAfter };
-        });
+    });
 
-        tx.update(productRef, { variants: updatedVariants });
+    // ✅ writes AFTER reads
+    tx.update(productRef, { variants: updatedVariants });
 
-        const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
-        tx.set(movRef, {
+    const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
+    tx.set(movRef, {
         createdAt: FieldValue.serverTimestamp(),
         type: "admin_adjust",
         orderId: null,
@@ -342,10 +345,14 @@ export const adjustStock = async (id, payload, actor = "admin") => {
         stockAfter,
         actor,
         reason: (payload?.reason ?? "").toString().trim() || null,
-        });
+    });
 
-        const after = await tx.get(productRef);
-        return { id: after.id, ...after.data() };
+    // ✅ NO leer de nuevo: devolvemos el “after” calculado
+    return {
+        id: snap.id,
+        ...product,
+        variants: updatedVariants,
+    };
     });
 
     return result;
