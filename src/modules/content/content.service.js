@@ -23,7 +23,8 @@ function normalizeItems(items = []) {
 }
 
 function onlyActiveSorted(items = []) {
-    
+    const normalized = normalizeItems(items);
+    return normalized.filter((it) => it.active).sort((a, b) => a.order - b.order);
 }
 
 export async function getHomeHeroPublic() {
