@@ -74,7 +74,7 @@ app.use("/api/media", mediaRouter);
 // 🧩 Content (Firestore) - Público + Admin
 app.use("/api/content", contentRouter);
 
-// Cometarios (Firestore) - Público + Admin
+// Comentarios (Firestore) - Público + Admin
 app.use("/api/content", googleReviewsRouter);
 
 // ❌ 404
