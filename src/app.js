@@ -10,6 +10,7 @@ import paymentsRouter from "./modules/payments/payments.routes.js";
 
 import mediaRouter from "./modules/media/media.routes.js";
 import contentRouter from "./modules/content/content.routes.js";
+import googleReviewsRouter from "./modules/content/googleReviews.router.js";
 
 import { errorHandler } from "./middlewares/error.middleware.js";
 
@@ -64,7 +65,7 @@ app.use((req, res, next) => {
 // pagos
 app.use("/api/payments", paymentsRouter);
 
-// resgistra movimiento
+// registra movimiento
 app.use("/api/stock-movements", stockMovementsRouter);
 
 // 🖼️ Media (Cloudinary) - Admin
@@ -72,6 +73,9 @@ app.use("/api/media", mediaRouter);
 
 // 🧩 Content (Firestore) - Público + Admin
 app.use("/api/content", contentRouter);
+
+// Cometarios (Firestore) - Público + Admin
+app.use("/api/content", googleReviewsRouter);
 
 // ❌ 404
 app.use((req, res) => {
