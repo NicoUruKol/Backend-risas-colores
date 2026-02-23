@@ -10,7 +10,7 @@ import paymentsRouter from "./modules/payments/payments.routes.js";
 
 import mediaRouter from "./modules/media/media.routes.js";
 import contentRouter from "./modules/content/content.routes.js";
-import googleReviewsRouter from "./modules/content/googleReviews.router.js";
+import googleReviewsRouter from "./modules/reviews/googleReviews.router.js";
 
 import { errorHandler } from "./middlewares/error.middleware.js";
 
@@ -75,7 +75,7 @@ app.use("/api/media", mediaRouter);
 app.use("/api/content", contentRouter);
 
 // Comentarios (Firestore) - Público + Admin
-app.use("/api/content", googleReviewsRouter);
+app.use("/api/reviews", googleReviewsRouter);
 
 // ❌ 404
 app.use((req, res) => {
