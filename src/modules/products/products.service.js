@@ -13,6 +13,26 @@ const makeError = (message, code = "VALIDATION_ERROR", details = []) => {
     return err;
 };
 
+const normalizeSizeKey = (raw) => {
+    const s = (raw ?? "").toString().trim();
+    if (!s) return "";
+
+    // Normalización fuerte: lower + sin tildes
+    const basic = s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+
+    // Alias de talle único
+    if (basic === "u" || basic === "unico" || basic === "unico ") return "u";
+
+    // Para los talles numéricos (1..5), devolvemos tal cual
+    return basic;
+};
+
+const sizeMatches = (variantSize, incomingSize) =>
+    normalizeSizeKey(variantSize) === normalizeSizeKey(incomingSize);
+
 const normalizeId = (id) => (id ?? "").toString().trim();
 
 const sanitizeVariantsPublic = (variants) => {
@@ -308,7 +328,7 @@ export const adjustStock = async (id, payload, actor = "admin") => {
 
     const product = snap.data();
     const variants = Array.isArray(product?.variants) ? product.variants : [];
-    const vIndex = variants.findIndex((v) => (v?.size ?? "").toString().trim() === size);
+    const vIndex = variants.findIndex((v) => sizeMatches(v?.size, size));
 
     if (vIndex === -1) {
         throw makeError("Talle no encontrado", "VALIDATION_ERROR", [
@@ -339,7 +359,8 @@ export const adjustStock = async (id, payload, actor = "admin") => {
         type: "admin_adjust",
         orderId: null,
         productCode: docId,
-        size,
+        size: (payload?.size ?? "").toString().trim(),
+        sizeKey: normalizeSizeKey(payload?.size),
         qtyDelta: delta,
         stockBefore,
         stockAfter,
