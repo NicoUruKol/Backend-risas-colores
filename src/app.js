@@ -22,23 +22,19 @@ const allowedOrigins = [
     "https://risas-colores.vercel.app",
 ];
 
-app.use(
-    cors({
-        origin: (origin, cb) => {
-        // Permite requests sin Origin (Postman, server-to-server, health checks)
+const corsMiddleware = cors({
+    origin: (origin, cb) => {
         if (!origin) return cb(null, true);
-
         if (allowedOrigins.includes(origin)) return cb(null, true);
         return cb(new Error(`CORS blocked: ${origin}`));
-        },
-        credentials: true,
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
-    })
-);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+});
 
-// Importante para preflight
-app.options(/.*/, cors());
+app.use(corsMiddleware);
+app.options(/.*/, corsMiddleware);
 
 
 app.use(express.json());

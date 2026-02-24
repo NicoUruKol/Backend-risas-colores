@@ -107,15 +107,17 @@ export async function setGoogleReviewsUrlAdmin(googleReviewsUrl) {
         throw err;
     }
 
+    const now = admin.firestore.Timestamp.now();
+
     await db.collection(COLL).doc(DOC).set(
         {
         googleReviewsUrl: url,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: now,
         },
         { merge: true }
     );
 
-    return { googleReviewsUrl: url };
+    return { googleReviewsUrl: url, updatedAt: now };
 }
 
 export async function createGoogleReviewAdmin(payload) {
@@ -129,7 +131,6 @@ export async function createGoogleReviewAdmin(payload) {
         throw err;
     }
 
-    const now = admin.firestore.FieldValue.serverTimestamp();
     const it = normalizeItem(payload);
 
     it.id = crypto.randomUUID();
@@ -137,6 +138,8 @@ export async function createGoogleReviewAdmin(payload) {
     it.active = it.active !== false;
 
     validateForSave(it);
+
+    const now = admin.firestore.Timestamp.now();
 
     const toSave = {
         ...it,
@@ -152,7 +155,8 @@ export async function createGoogleReviewAdmin(payload) {
         { merge: true }
     );
 
-    return { item: { ...toSave, id: it.id } };
+    // ✅ ahora toSave es JSON-safe
+    return { item: toSave };
 }
 
 export async function updateGoogleReviewAdmin(id, payload) {
@@ -176,13 +180,12 @@ export async function updateGoogleReviewAdmin(id, payload) {
 
     const current = items[idx];
     const next = normalizeItem({ ...current, ...payload, id: reviewId });
-
-    // No dejamos que cambien source
     next.source = "Google";
 
     validateForSave(next);
 
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    const now = admin.firestore.Timestamp.now();
+
     const updated = {
         ...current,
         ...next,
@@ -222,7 +225,8 @@ export async function setGoogleReviewActiveAdmin(id, active) {
         throw err;
     }
 
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    const now = admin.firestore.Timestamp.now();
+
     const newItems = [...items];
     newItems[idx] = { ...items[idx], active: !!active, updatedAt: now };
 
@@ -234,7 +238,7 @@ export async function setGoogleReviewActiveAdmin(id, active) {
         { merge: true }
     );
 
-    return { id: reviewId, active: !!active };
+    return { id: reviewId, active: !!active, updatedAt: now };
 }
 
 export async function deleteGoogleReviewAdmin(id) {
