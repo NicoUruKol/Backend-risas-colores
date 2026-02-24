@@ -1,12 +1,24 @@
 import admin from "firebase-admin";
 import { db } from "../../config/firebase.js";
 import crypto from "crypto";
+import axios from "axios";
+import cloudinary from "../../config/cloudinary.js";
 
+/* =========================
+    Config
+========================= */
 const COLL = "site_content";
 const DOC = "google_reviews";
-
 const MAX_ITEMS = 60;
 
+const CLOUD_FOLDER = "risas-colores/google-reviews";
+const CLOUD_TAG = "google-reviews";
+const MAX_BYTES = 2 * 1024 * 1024; // 2MB
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/* =========================
+    Helpers
+========================= */
 function isValidHttpUrl(value) {
     if (!value) return true;
     try {
@@ -17,11 +29,87 @@ function isValidHttpUrl(value) {
     }
 }
 
-function normalizeItem(x = {}) {
+function isOurCloudinaryUrl(url = "") {
+    return typeof url === "string" && url.includes("res.cloudinary.com/");
+}
+
+function canMirror(url = "") {
+    return isValidHttpUrl(url) && !isOurCloudinaryUrl(url);
+}
+
+async function safeDestroyCloudinary(publicId) {
+    if (!publicId) return;
+    try {
+        await cloudinary.uploader.destroy(publicId, { invalidate: true });
+    } catch (e) {
+        console.warn("Cloudinary destroy failed:", e?.message || e);
+    }
+}
+
+async function fetchImageAsDataUri(imageUrl) {
+    const resp = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+        timeout: 12000,
+        maxContentLength: MAX_BYTES,
+        maxBodyLength: MAX_BYTES,
+        validateStatus: (s) => s >= 200 && s < 300,
+        headers: {
+        "User-Agent": "RisasYColoresBot/1.0",
+        },
+    });
+
+    const mime = String(resp.headers?.["content-type"] || "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+
+    if (!ALLOWED_MIME.has(mime)) {
+        const err = new Error(`Tipo de imagen no permitido: ${mime || "desconocido"}`);
+        err.statusCode = 400;
+        throw err;
+    }
+
+    const bytes = Buffer.byteLength(resp.data);
+    if (bytes > MAX_BYTES) {
+        const err = new Error(`Imagen demasiado grande (max ${MAX_BYTES / 1024 / 1024}MB).`);
+        err.statusCode = 400;
+        throw err;
+    }
+
+    const base64 = Buffer.from(resp.data).toString("base64");
+    return { dataUri: `data:${mime};base64,${base64}` };
+}
+
+async function mirrorImageToCloudinary(imageUrl, { reviewId } = {}) {
+    if (!imageUrl) return null;
+    if (!canMirror(imageUrl)) return null;
+
+    const { dataUri } = await fetchImageAsDataUri(imageUrl);
+
+    const hash = crypto.createHash("sha1").update(String(imageUrl)).digest("hex").slice(0, 12);
+    const publicId = reviewId ? `review_${reviewId}_${hash}` : `review_${hash}`;
+
+    const upload = await cloudinary.uploader.upload(dataUri, {
+        folder: CLOUD_FOLDER,
+        public_id: publicId,
+        overwrite: true,
+        resource_type: "image",
+        tags: [CLOUD_TAG, "mirror"],
+        transformation: [
+        { width: 120, height: 120, crop: "fill", gravity: "face" },
+        { quality: "auto", fetch_format: "auto" },
+        ],
+    });
+
+    return { url: upload.secure_url, public_id: upload.public_id };
+    }
+
+    function normalizeItem(x = {}) {
     return {
         id: String(x?.id || "").trim(),
         authorName: String(x?.authorName || "").trim(),
         authorPhotoUrl: String(x?.authorPhotoUrl || "").trim(),
+        authorPhotoPublicId: String(x?.authorPhotoPublicId || "").trim(),
         rating: Number(x?.rating),
         relativeTime: String(x?.relativeTime || "").trim(),
         text: String(x?.text || "").trim(),
@@ -30,9 +118,9 @@ function normalizeItem(x = {}) {
         updatedAt: x?.updatedAt ?? null,
         source: "Google",
     };
-}
+    }
 
-function validateForSave(item) {
+    function validateForSave(item) {
     if (!item.authorName) {
         const err = new Error("Falta authorName.");
         err.statusCode = 400;
@@ -74,7 +162,9 @@ function sortItemsNewestFirst(items = []) {
     });
 }
 
-/* ===== Público ===== */
+/* =========================
+    Público
+========================= */
 export async function getGoogleReviewsPublic() {
     const data = await readDoc();
     const raw = Array.isArray(data.items) ? data.items : [];
@@ -86,7 +176,9 @@ export async function getGoogleReviewsPublic() {
     };
 }
 
-/* ===== Admin ===== */
+/* =========================
+    Admin
+========================= */
 export async function getGoogleReviewsAdmin() {
     const data = await readDoc();
     const raw = Array.isArray(data.items) ? data.items : [];
@@ -139,6 +231,14 @@ export async function createGoogleReviewAdmin(payload) {
 
     validateForSave(it);
 
+    if (it.authorPhotoUrl && canMirror(it.authorPhotoUrl)) {
+        const mirrored = await mirrorImageToCloudinary(it.authorPhotoUrl, { reviewId: it.id });
+        if (mirrored?.url) {
+        it.authorPhotoUrl = mirrored.url;
+        it.authorPhotoPublicId = mirrored.public_id || "";
+        }
+    }
+
     const now = admin.firestore.Timestamp.now();
 
     const toSave = {
@@ -155,7 +255,6 @@ export async function createGoogleReviewAdmin(payload) {
         { merge: true }
     );
 
-    // ✅ ahora toSave es JSON-safe
     return { item: toSave };
 }
 
@@ -181,6 +280,29 @@ export async function updateGoogleReviewAdmin(id, payload) {
     const current = items[idx];
     const next = normalizeItem({ ...current, ...payload, id: reviewId });
     next.source = "Google";
+
+    const incomingUrl = typeof payload?.authorPhotoUrl !== "undefined" ? String(payload.authorPhotoUrl || "").trim() : null;
+    const photoChanged = incomingUrl !== null && incomingUrl !== current.authorPhotoUrl;
+
+    if (photoChanged) {
+        if (current.authorPhotoPublicId) {
+        await safeDestroyCloudinary(current.authorPhotoPublicId);
+        }
+
+        if (incomingUrl && canMirror(incomingUrl)) {
+        const mirrored = await mirrorImageToCloudinary(incomingUrl, { reviewId });
+        if (mirrored?.url) {
+            next.authorPhotoUrl = mirrored.url;
+            next.authorPhotoPublicId = mirrored.public_id || "";
+        } else {
+            next.authorPhotoUrl = incomingUrl;
+            next.authorPhotoPublicId = "";
+        }
+        } else {
+        next.authorPhotoUrl = incomingUrl || "";
+        next.authorPhotoPublicId = "";
+        }
+    }
 
     validateForSave(next);
 
@@ -253,6 +375,8 @@ export async function deleteGoogleReviewAdmin(id) {
     const raw = Array.isArray(data.items) ? data.items : [];
     const items = raw.map(normalizeItem).filter((x) => x.id);
 
+    const target = items.find((x) => x.id === reviewId);
+
     const newItems = items.filter((x) => x.id !== reviewId);
     if (newItems.length === items.length) {
         const err = new Error("Reseña no encontrada.");
@@ -260,7 +384,12 @@ export async function deleteGoogleReviewAdmin(id) {
         throw err;
     }
 
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    if (target?.authorPhotoPublicId) {
+        await safeDestroyCloudinary(target.authorPhotoPublicId);
+    }
+
+    const now = admin.firestore.Timestamp.now();
+
     await db.collection(COLL).doc(DOC).set(
         {
         items: newItems,
