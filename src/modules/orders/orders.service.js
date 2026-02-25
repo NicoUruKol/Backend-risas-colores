@@ -98,6 +98,8 @@ export const create = async (payload) => {
     const customer = payload?.customer || null;
     const items = Array.isArray(payload?.items) ? payload.items : [];
 
+    const meta = payload?.meta || null;
+
     if (items.length === 0) {
         throw validationError("items es obligatorio (array no vacío)", ["items"]);
     }
@@ -122,97 +124,105 @@ export const create = async (payload) => {
     // 1) Transacción Firestore: valida + descuenta + crea orden + registra movimientos
     const baseOrder = await db.runTransaction(async (tx) => {
         const computedItems = [];
-        let total = 0;
+            let total = 0;
 
-        for (const it of normalized) {
-        const productRef = db.collection(PRODUCTS_COL).doc(it.code);
-        const productSnap = await tx.get(productRef);
+            for (const it of normalized) {
+            const productRef = db.collection(PRODUCTS_COL).doc(it.code);
+            const productSnap = await tx.get(productRef);
 
-        if (!productSnap.exists) {
-            throw notFoundError("Producto no encontrado", { productCode: it.code });
-        }
+            if (!productSnap.exists) {
+                throw notFoundError("Producto no encontrado", { productCode: it.code });
+            }
 
-        const product = productSnap.data();
+            const product = productSnap.data();
 
-        if (product?.active !== true) {
-            throw notFoundError("Producto inactivo o no disponible", { productCode: it.code });
-        }
+            if (product?.active !== true) {
+                throw notFoundError("Producto inactivo o no disponible", { productCode: it.code });
+            }
 
-        const variants = Array.isArray(product?.variants) ? product.variants : [];
-        const vIndex = variants.findIndex((v) => normalizeSize(v?.size) === it.size);
+            const variants = Array.isArray(product?.variants) ? product.variants : [];
+            const vIndex = variants.findIndex((v) => normalizeSize(v?.size) === it.size);
 
-        if (vIndex === -1) {
-            throw notFoundError("Talle no encontrado", { productCode: it.code, size: it.size });
-        }
+            if (vIndex === -1) {
+                throw notFoundError("Talle no encontrado", { productCode: it.code, size: it.size });
+            }
 
-        const variant = variants[vIndex];
-        const currentStock = Number(variant?.stock ?? 0);
-        const unitPrice = Number(variant?.price ?? product?.price ?? 0);
+            const variant = variants[vIndex];
+            const currentStock = Number(variant?.stock ?? 0);
+            const unitPrice = Number(variant?.price ?? product?.price ?? 0);
 
-        if (!isPositiveInt(it.qty)) {
-            throw validationError("Cantidad inválida", [{ productCode: it.code, size: it.size }]);
-        }
+            if (!isPositiveInt(it.qty)) {
+                throw validationError("Cantidad inválida", [{ productCode: it.code, size: it.size }]);
+            }
 
-        if (currentStock < it.qty) {
-            throw outOfStockError("Stock insuficiente", {
-            productCode: it.code,
-            size: it.size,
-            requested: it.qty,
-            available: currentStock,
+            if (currentStock < it.qty) {
+                throw outOfStockError("Stock insuficiente", {
+                productCode: it.code,
+                size: it.size,
+                requested: it.qty,
+                available: currentStock,
+                });
+            }
+
+            const stockBefore = currentStock;
+            const stockAfter = currentStock - it.qty;
+
+            const updatedVariants = variants.map((v, i) => {
+                if (i !== vIndex) return v;
+                return { ...v, stock: stockAfter };
             });
-        }
 
-        const stockBefore = currentStock;
-        const stockAfter = currentStock - it.qty;
+            tx.update(productRef, { variants: updatedVariants });
 
-        const updatedVariants = variants.map((v, i) => {
-            if (i !== vIndex) return v;
-            return { ...v, stock: stockAfter };
-        });
+            const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
+            tx.set(movRef, {
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                type: "order_create",
+                orderId: orderRef.id,
+                productCode: it.code,
+                size: it.size,
+                qtyDelta: -it.qty,
+                stockBefore,
+                stockAfter,
+                actor: "system",
+            });
 
-        tx.update(productRef, { variants: updatedVariants });
+            const snapItem = {
+                code: it.code,
+                name: product?.name ?? "",
+                avatar: product?.avatar ?? "",
+                category: product?.category ?? "",
+                season: product?.season ?? "",
+                size: it.size,
+                qty: it.qty,
+                unitPrice,
+                lineTotal: unitPrice * it.qty,
+            };
 
-        const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
-        tx.set(movRef, {
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            type: "order_create",
-            orderId: orderRef.id,
-            productCode: it.code,
-            size: it.size,
-            qtyDelta: -it.qty,
-            stockBefore,
-            stockAfter,
-            actor: "system",
-        });
-
-        const snapItem = {
-            code: it.code,
-            name: product?.name ?? "",
-            avatar: product?.avatar ?? "",
-            category: product?.category ?? "",
-            season: product?.season ?? "",
-            size: it.size,
-            qty: it.qty,
-            unitPrice,
-            lineTotal: unitPrice * it.qty,
-        };
-
-        total += snapItem.lineTotal;
-        computedItems.push(snapItem);
+            total += snapItem.lineTotal;
+            computedItems.push(snapItem);
         }
 
         const orderDoc = {
-        status: "created",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        customer: customer
-            ? {
-                name: (customer.name ?? "").toString().trim(),
-                email: (customer.email ?? "").toString().trim(),
-                phone: (customer.phone ?? "").toString().trim(),
+            status: "created",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            customer: customer
+                ? {
+                    name: (customer.name ?? "").toString().trim(),
+                    email: (customer.email ?? "").toString().trim(),
+                    phone: (customer.phone ?? "").toString().trim(),
+                }
+                : null,
+
+            family: meta
+                ? {
+                    kidName: (meta.kidName ?? "").toString().trim(),
+                    adultName: (meta.adultName ?? "").toString().trim(),
             }
             : null,
-        items: computedItems,
-        total,
+
+            items: computedItems,
+            total,
         };
 
         tx.set(orderRef, orderDoc);
