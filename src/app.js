@@ -20,6 +20,8 @@ const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "https://risas-colores.vercel.app",
+    "https://risasycolores.com.ar",
+    "https://www.risasycolores.com.ar",
 ];
 
 const corsMiddleware = cors({
