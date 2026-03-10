@@ -8,6 +8,7 @@ import ordersRouter from "./modules/orders/orders.routes.js";
 import stockMovementsRouter from "./modules/stockMovements/stockMovements.routes.js";
 import paymentsRouter from "./modules/payments/payments.routes.js";
 
+import adminsRouter from "./modules/admins/admins.routes.js";
 import mediaRouter from "./modules/media/media.routes.js";
 import contentRouter from "./modules/content/content.routes.js";
 import googleReviewsRouter from "./modules/reviews/googleReviews.router.js";
@@ -47,6 +48,9 @@ app.get("/", (req, res) => {
 
 // 🔐 Auth primero
 app.use("/api/auth", authRouter);
+
+// 🔐 Admins
+app.use("/api/admins", adminsRouter);
 
 // 🧺 Products
 app.use("/api/products", productsRouter);

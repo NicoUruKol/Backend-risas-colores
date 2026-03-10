@@ -1,7 +1,9 @@
 import app from "./src/app.js";
+import { ensureInitialAdmin } from "./src/modules/auth/auth.service.js";
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-    console.log(`✅ API corriendo en http://localhost:${PORT}`);
-});
+(async () => {
+    await ensureInitialAdmin();
+    app.listen(PORT, () => console.log("✅ Server on", PORT));
+})();
