@@ -358,15 +358,16 @@ export const setStatus = async (id, nextStatus) => {
 
     const ref = db.collection(ORDERS_COL).doc(id);
 
-    const updated = await db.runTransaction(async (tx) => {
+    const exists = await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
-        if (!snap.exists) return null;
+        if (!snap.exists) return false;
 
-        const prev = (snap.data()?.status ?? "created").toString();
+        const prevData = snap.data() || {};
+        const prevStatus = (prevData.status ?? "created").toString();
 
-        if (!canTransition(prev, status)) {
+        if (!canTransition(prevStatus, status)) {
             throw invalidTransitionError("Transición de status no permitida", {
-                from: prev,
+                from: prevStatus,
                 to: status,
             });
         }
@@ -376,11 +377,12 @@ export const setStatus = async (id, nextStatus) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
-        const after = await tx.get(ref);
-        return { id: after.id, ...after.data() };
+        return true;
     });
 
-    return updated;
+    if (!exists) return null;
+
+    return await getById(id);
 };
 
 /* ==============================
@@ -397,9 +399,9 @@ export const setDeliveryStatus = async (id, nextDeliveryStatus) => {
 
     const ref = db.collection(ORDERS_COL).doc(id);
 
-    const updated = await db.runTransaction(async (tx) => {
+    const exists = await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
-        if (!snap.exists) return null;
+        if (!snap.exists) return false;
 
         const data = snap.data() || {};
         const orderStatus = (data.status ?? "created").toString();
@@ -432,11 +434,12 @@ export const setDeliveryStatus = async (id, nextDeliveryStatus) => {
 
         tx.update(ref, patch);
 
-        const after = await tx.get(ref);
-        return { id: after.id, ...after.data() };
+        return true;
     });
 
-    return updated;
+    if (!exists) return null;
+
+    return await getById(id);
 };
 
 /* ==============================
@@ -445,12 +448,12 @@ Admin: cancel + restock
 export const cancel = async (orderId) => {
     const orderRef = db.collection(ORDERS_COL).doc(orderId);
 
-    const result = await db.runTransaction(async (tx) => {
+    const exists = await db.runTransaction(async (tx) => {
         const orderSnap = await tx.get(orderRef);
-        if (!orderSnap.exists) return null;
+        if (!orderSnap.exists) return false;
 
-        const order = orderSnap.data();
-        const status = (order?.status ?? "created").toString();
+        const order = orderSnap.data() || {};
+        const status = (order.status ?? "created").toString();
 
         const cancelable = new Set(["created", "pending_payment", "expired"]);
         if (!cancelable.has(status)) {
@@ -460,62 +463,71 @@ export const cancel = async (orderId) => {
             });
         }
 
-        const items = Array.isArray(order?.items) ? order.items : [];
+        const items = Array.isArray(order.items) ? order.items : [];
 
-        if (items.length > 0) {
-            const productRefs = items.map((it) => db.collection(PRODUCTS_COL).doc(it.code));
-            const productSnaps = await Promise.all(productRefs.map((r) => tx.get(r)));
+        const validItems = items.filter((it) => {
+            const code = (it?.code ?? "").toString().trim();
+            const size = (it?.size ?? "").toString().trim();
+            const qty = Number(it?.qty ?? 0);
 
-            for (let i = 0; i < items.length; i++) {
-                const it = items[i];
-                const code = (it?.code ?? "").toString().trim();
-                const size = (it?.size ?? "").toString().trim();
-                const qty = Number(it?.qty ?? 0);
+            return code && size && Number.isFinite(qty) && qty > 0;
+        });
 
-                if (!code || !size || !Number.isFinite(qty) || qty <= 0) continue;
+        const productRefs = validItems.map((it) => db.collection(PRODUCTS_COL).doc(it.code));
+        const productSnaps = productRefs.length
+            ? await Promise.all(productRefs.map((ref) => tx.get(ref)))
+            : [];
 
-                const pSnap = productSnaps[i];
-                if (!pSnap.exists) continue;
+        for (let i = 0; i < validItems.length; i++) {
+            const item = validItems[i];
+            const productRef = productRefs[i];
+            const productSnap = productSnaps[i];
 
-                const pData = pSnap.data();
-                const variants = Array.isArray(pData?.variants) ? pData.variants : [];
-                const vIndex = variants.findIndex((v) => (v?.size ?? "").toString().trim() === size);
-                if (vIndex === -1) continue;
+            if (!productSnap.exists) continue;
 
-                const currentStock = Number(variants[vIndex]?.stock ?? 0);
-                const nextStock = currentStock + qty;
+            const productData = productSnap.data() || {};
+            const variants = Array.isArray(productData.variants) ? productData.variants : [];
 
-                const updatedVariants = variants.map((v, idx) => {
-                    if (idx !== vIndex) return v;
-                    return { ...v, stock: nextStock };
-                });
+            const variantIndex = variants.findIndex(
+                (v) => (v?.size ?? "").toString().trim() === item.size
+            );
 
-                tx.update(productRefs[i], { variants: updatedVariants });
+            if (variantIndex === -1) continue;
 
-                const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
-                tx.set(movRef, {
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                    type: "order_cancel",
-                    orderId,
-                    productCode: code,
-                    size,
-                    qtyDelta: qty,
-                    stockBefore: currentStock,
-                    stockAfter: nextStock,
-                    actor: "system",
-                });
-            }
+            const currentStock = Number(variants[variantIndex]?.stock ?? 0);
+            const nextStock = currentStock + Number(item.qty);
+
+            const updatedVariants = variants.map((variant, index) => {
+                if (index !== variantIndex) return variant;
+                return { ...variant, stock: nextStock };
+            });
+
+            tx.update(productRef, { variants: updatedVariants });
+
+            const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
+            tx.set(movRef, {
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                type: "order_cancel",
+                orderId,
+                productCode: item.code,
+                size: item.size,
+                qtyDelta: Number(item.qty),
+                stockBefore: currentStock,
+                stockAfter: nextStock,
+                actor: "system",
+            });
         }
 
         tx.update(orderRef, {
             status: "cancelled",
-            cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
-        const after = await tx.get(orderRef);
-        return { id: after.id, ...after.data() };
+        return true;
     });
 
-    return result;
+    if (!exists) return null;
+
+    return await getById(orderId);
 };
