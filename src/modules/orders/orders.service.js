@@ -2,11 +2,16 @@ import admin from "firebase-admin";
 import { db } from "../../config/firebase.js";
 import { mpPreference } from "../../config/mercadopago.js";
 
-
+/* ==============================
+Collections
+============================== */
 const PRODUCTS_COL = "products";
 const ORDERS_COL = "orders";
 const STOCK_MOVEMENTS_COL = "stock_movements";
 
+/* ==============================
+Allowed status
+============================== */
 const ALLOWED_STATUS = new Set([
     "created",
     "pending_payment",
@@ -15,12 +20,39 @@ const ALLOWED_STATUS = new Set([
     "cancelled",
 ]);
 
+const ALLOWED_DELIVERY_STATUS = new Set([
+    "pending_delivery",
+    "delivered",
+]);
+
 const canTransition = (from, to) => {
     if (from === to) return true;
 
     if (from === "created" && (to === "pending_payment" || to === "paid" || to === "cancelled")) return true;
     if (from === "pending_payment" && (to === "paid" || to === "expired" || to === "cancelled")) return true;
     if (from === "expired" && to === "cancelled") return true;
+
+    return false;
+};
+
+const canSetDeliveryStatus = ({ orderStatus, currentDeliveryStatus, nextDeliveryStatus }) => {
+    if (currentDeliveryStatus === nextDeliveryStatus) return true;
+
+    if (orderStatus !== "paid") return false;
+
+    if (
+        currentDeliveryStatus === "pending_delivery" &&
+        nextDeliveryStatus === "delivered"
+    ) {
+        return true;
+    }
+
+    if (
+        currentDeliveryStatus === "delivered" &&
+        nextDeliveryStatus === "pending_delivery"
+    ) {
+        return true;
+    }
 
     return false;
 };
@@ -49,6 +81,13 @@ const outOfStockError = (message, details = {}) => {
     return err;
 };
 
+const invalidTransitionError = (message, details = {}) => {
+    const err = new Error(message);
+    err.code = "INVALID_TRANSITION";
+    err.details = details;
+    return err;
+};
+
 const isPositiveInt = (n) => Number.isInteger(n) && n > 0;
 
 const normalizeCode = (code) => (code ?? "").toString().trim();
@@ -58,46 +97,54 @@ const normalizeSize = (size) => (size ?? "").toString().trim();
 Create Payment Preference (MP)
 ============================== */
 export const createPaymentPreference = async (order) => {
+    const missingEnv = [];
+
+    if (!process.env.MP_ACCESS_TOKEN) missingEnv.push("MP_ACCESS_TOKEN");
+    if (!process.env.PUBLIC_URL) missingEnv.push("PUBLIC_URL");
+    if (!process.env.FRONT_URL) missingEnv.push("FRONT_URL");
+
+    if (missingEnv.length > 0) {
+        const err = new Error(
+            `Faltan variables de entorno para Mercado Pago: ${missingEnv.join(", ")}`
+        );
+        err.code = "PAYMENT_CONFIG_ERROR";
+        err.details = missingEnv;
+        throw err;
+    }
+
     const preference = {
         items: order.items.map((item) => ({
-        title: `${item.name} - Talle ${item.size}`,
-        quantity: item.qty,
-        currency_id: "ARS",
-        unit_price: item.unitPrice,
+            title: `${item.name} - Talle ${item.size}`,
+            quantity: item.qty,
+            currency_id: "ARS",
+            unit_price: item.unitPrice,
         })),
         external_reference: order.id,
-        // ⚠️ más adelante lo cambiás a tu dominio real o ngrok
         notification_url: `${process.env.PUBLIC_URL}/api/payments/webhook`,
         back_urls: {
-        success: `${process.env.FRONT_URL}/payment-success`,
-        failure: `${process.env.FRONT_URL}/payment-failure`,
-        pending: `${process.env.FRONT_URL}/payment-pending`,
+            success: `${process.env.FRONT_URL}/payment-success`,
+            failure: `${process.env.FRONT_URL}/payment-failure`,
+            pending: `${process.env.FRONT_URL}/payment-pending`,
         },
-
         auto_return: "approved",
     };
 
     const response = await mpPreference.create({ body: preference });
     return response;
-    //    return {
-    //        id: "fake-preference-id",
-    //        init_point: "http://localhost:5173/fake-checkout"
-    //        };
 };
-
 
 /* ==============================
 Create Order (public)
 Body:
 {
     customer?: { name?, email?, phone? },
-    items: [{ code, size, qty }]
+    items: [{ code, size, qty }],
+    meta?: { kidName?, adultName? }
 }
 ============================== */
 export const create = async (payload) => {
     const customer = payload?.customer || null;
     const items = Array.isArray(payload?.items) ? payload.items : [];
-
     const meta = payload?.meta || null;
 
     if (items.length === 0) {
@@ -114,19 +161,23 @@ export const create = async (payload) => {
         if (!size) problems.push(`items[${idx}].size es obligatorio`);
         if (!isPositiveInt(qty)) problems.push(`items[${idx}].qty debe ser entero > 0`);
 
-        if (problems.length) throw validationError("Datos de compra inválidos", problems);
+        if (problems.length) {
+            throw validationError("Datos de compra inválidos", problems);
+        }
 
         return { code, size, qty };
     });
 
     const orderRef = db.collection(ORDERS_COL).doc();
 
-    // 1) Transacción Firestore: valida + descuenta + crea orden + registra movimientos
+    /* ==============================
+    1) Transaction: validate + discount stock + create order + movements
+    ============================== */
     const baseOrder = await db.runTransaction(async (tx) => {
         const computedItems = [];
-            let total = 0;
+        let total = 0;
 
-            for (const it of normalized) {
+        for (const it of normalized) {
             const productRef = db.collection(PRODUCTS_COL).doc(it.code);
             const productSnap = await tx.get(productRef);
 
@@ -157,10 +208,10 @@ export const create = async (payload) => {
 
             if (currentStock < it.qty) {
                 throw outOfStockError("Stock insuficiente", {
-                productCode: it.code,
-                size: it.size,
-                requested: it.qty,
-                available: currentStock,
+                    productCode: it.code,
+                    size: it.size,
+                    requested: it.qty,
+                    available: currentStock,
                 });
             }
 
@@ -205,7 +256,10 @@ export const create = async (payload) => {
 
         const orderDoc = {
             status: "created",
+            deliveryStatus: "pending_delivery",
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+
             customer: customer
                 ? {
                     name: (customer.name ?? "").toString().trim(),
@@ -218,46 +272,59 @@ export const create = async (payload) => {
                 ? {
                     kidName: (meta.kidName ?? "").toString().trim(),
                     adultName: (meta.adultName ?? "").toString().trim(),
-            }
-            : null,
+                }
+                : null,
 
             items: computedItems,
             total,
+
+            notifications: {
+                gardenPaidEmailSent: false,
+                familyPaidEmailSent: false,
+            },
         };
 
         tx.set(orderRef, orderDoc);
 
         return {
-        id: orderRef.id,
-        status: "created",
-        total,
-        items: computedItems,
+            id: orderRef.id,
+            status: "created",
+            deliveryStatus: "pending_delivery",
+            total,
+            items: computedItems,
         };
     });
 
-    // 2) Fuera de la transacción: crear preferencia MP
+    /* ==============================
+    2) Outside transaction: create MP preference
+    ============================== */
     const payment = await createPaymentPreference({
         id: baseOrder.id,
         items: baseOrder.items,
     });
 
-    // 3) Guardar info de MP + pasar a pending_payment
+    /* ==============================
+    3) Save MP info + move to pending_payment
+    ============================== */
     await db.collection(ORDERS_COL).doc(baseOrder.id).set(
         {
-        status: "pending_payment",
-        mp: {
-            preferenceId: payment.id,
-            init_point: payment.init_point,
-        },
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            status: "pending_payment",
+            mp: {
+                preferenceId: payment.id,
+                init_point: payment.init_point,
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
     );
 
-    // 4) Respuesta al front
+    /* ==============================
+    4) Response to front
+    ============================== */
     return {
         id: baseOrder.id,
         status: "pending_payment",
+        deliveryStatus: "pending_delivery",
         total: baseOrder.total,
         init_point: payment.init_point,
     };
@@ -269,23 +336,23 @@ Admin: list/get
 export const list = async () => {
     const snap = await db.collection(ORDERS_COL).orderBy("createdAt", "desc").limit(100).get();
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    };
+};
 
-    export const getById = async (id) => {
+export const getById = async (id) => {
     const doc = await db.collection(ORDERS_COL).doc(id).get();
     if (!doc.exists) return null;
     return { id: doc.id, ...doc.data() };
-    };
+};
 
-    /* ==============================
-    Admin: set status
-    ============================== */
-    export const setStatus = async (id, nextStatus) => {
+/* ==============================
+Admin: set payment status
+============================== */
+export const setStatus = async (id, nextStatus) => {
     const status = (nextStatus ?? "").toString().trim();
 
     if (!ALLOWED_STATUS.has(status)) {
         throw validationError("Status inválido", [
-        `status debe ser uno de: ${Array.from(ALLOWED_STATUS).join(", ")}`,
+            `status debe ser uno de: ${Array.from(ALLOWED_STATUS).join(", ")}`,
         ]);
     }
 
@@ -298,16 +365,72 @@ export const list = async () => {
         const prev = (snap.data()?.status ?? "created").toString();
 
         if (!canTransition(prev, status)) {
-        const err = new Error("Transición de status no permitida");
-        err.code = "INVALID_TRANSITION";
-        err.details = { from: prev, to: status };
-        throw err;
+            throw invalidTransitionError("Transición de status no permitida", {
+                from: prev,
+                to: status,
+            });
         }
 
         tx.update(ref, {
-        status,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            status,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+
+        const after = await tx.get(ref);
+        return { id: after.id, ...after.data() };
+    });
+
+    return updated;
+};
+
+/* ==============================
+Admin: set delivery status
+============================== */
+export const setDeliveryStatus = async (id, nextDeliveryStatus) => {
+    const deliveryStatus = (nextDeliveryStatus ?? "").toString().trim();
+
+    if (!ALLOWED_DELIVERY_STATUS.has(deliveryStatus)) {
+        throw validationError("Estado de entrega inválido", [
+            `deliveryStatus debe ser uno de: ${Array.from(ALLOWED_DELIVERY_STATUS).join(", ")}`,
+        ]);
+    }
+
+    const ref = db.collection(ORDERS_COL).doc(id);
+
+    const updated = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return null;
+
+        const data = snap.data() || {};
+        const orderStatus = (data.status ?? "created").toString();
+        const currentDeliveryStatus = (data.deliveryStatus ?? "pending_delivery").toString();
+
+        if (
+            !canSetDeliveryStatus({
+                orderStatus,
+                currentDeliveryStatus,
+                nextDeliveryStatus: deliveryStatus,
+            })
+        ) {
+            throw invalidTransitionError("Transición de entrega no permitida", {
+                orderStatus,
+                from: currentDeliveryStatus,
+                to: deliveryStatus,
+            });
+        }
+
+        const patch = {
+            deliveryStatus,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        if (deliveryStatus === "delivered") {
+            patch.deliveredAt = admin.firestore.FieldValue.serverTimestamp();
+        } else {
+            patch.deliveredAt = null;
+        }
+
+        tx.update(ref, patch);
 
         const after = await tx.get(ref);
         return { id: after.id, ...after.data() };
@@ -331,63 +454,63 @@ export const cancel = async (orderId) => {
 
         const cancelable = new Set(["created", "pending_payment", "expired"]);
         if (!cancelable.has(status)) {
-        const err = new Error("Transición de status no permitida");
-        err.code = "INVALID_TRANSITION";
-        err.details = { from: status, to: "cancelled" };
-        throw err;
+            throw invalidTransitionError("Transición de status no permitida", {
+                from: status,
+                to: "cancelled",
+            });
         }
 
         const items = Array.isArray(order?.items) ? order.items : [];
 
         if (items.length > 0) {
-        const productRefs = items.map((it) => db.collection(PRODUCTS_COL).doc(it.code));
-        const productSnaps = await Promise.all(productRefs.map((r) => tx.get(r)));
+            const productRefs = items.map((it) => db.collection(PRODUCTS_COL).doc(it.code));
+            const productSnaps = await Promise.all(productRefs.map((r) => tx.get(r)));
 
-        for (let i = 0; i < items.length; i++) {
-            const it = items[i];
-            const code = (it?.code ?? "").toString().trim();
-            const size = (it?.size ?? "").toString().trim();
-            const qty = Number(it?.qty ?? 0);
+            for (let i = 0; i < items.length; i++) {
+                const it = items[i];
+                const code = (it?.code ?? "").toString().trim();
+                const size = (it?.size ?? "").toString().trim();
+                const qty = Number(it?.qty ?? 0);
 
-            if (!code || !size || !Number.isFinite(qty) || qty <= 0) continue;
+                if (!code || !size || !Number.isFinite(qty) || qty <= 0) continue;
 
-            const pSnap = productSnaps[i];
-            if (!pSnap.exists) continue;
+                const pSnap = productSnaps[i];
+                if (!pSnap.exists) continue;
 
-            const pData = pSnap.data();
-            const variants = Array.isArray(pData?.variants) ? pData.variants : [];
-            const vIndex = variants.findIndex((v) => (v?.size ?? "").toString().trim() === size);
-            if (vIndex === -1) continue;
+                const pData = pSnap.data();
+                const variants = Array.isArray(pData?.variants) ? pData.variants : [];
+                const vIndex = variants.findIndex((v) => (v?.size ?? "").toString().trim() === size);
+                if (vIndex === -1) continue;
 
-            const currentStock = Number(variants[vIndex]?.stock ?? 0);
-            const nextStock = currentStock + qty;
+                const currentStock = Number(variants[vIndex]?.stock ?? 0);
+                const nextStock = currentStock + qty;
 
-            const updatedVariants = variants.map((v, idx) => {
-            if (idx !== vIndex) return v;
-            return { ...v, stock: nextStock };
-            });
+                const updatedVariants = variants.map((v, idx) => {
+                    if (idx !== vIndex) return v;
+                    return { ...v, stock: nextStock };
+                });
 
-            tx.update(productRefs[i], { variants: updatedVariants });
+                tx.update(productRefs[i], { variants: updatedVariants });
 
-            const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
-            tx.set(movRef, {
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            type: "order_cancel",
-            orderId,
-            productCode: code,
-            size,
-            qtyDelta: qty,
-            stockBefore: currentStock,
-            stockAfter: nextStock,
-            actor: "system",
-            });
-        }
+                const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
+                tx.set(movRef, {
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    type: "order_cancel",
+                    orderId,
+                    productCode: code,
+                    size,
+                    qtyDelta: qty,
+                    stockBefore: currentStock,
+                    stockAfter: nextStock,
+                    actor: "system",
+                });
+            }
         }
 
         tx.update(orderRef, {
-        status: "cancelled",
-        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            status: "cancelled",
+            cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
         const after = await tx.get(orderRef);

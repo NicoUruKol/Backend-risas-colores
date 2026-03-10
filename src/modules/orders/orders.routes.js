@@ -4,6 +4,7 @@ import {
     listOrders,
     getOrderById,
     updateOrderStatus,
+    updateOrderDeliveryStatus,
     cancelOrder,
 } from "./orders.controller.js";
 import { requireAdmin } from "../../middlewares/auth.middleware.js";
@@ -20,8 +21,10 @@ Admin
 ============================== */
 router.get("/", requireAdmin, listOrders);
 router.get("/:id", requireAdmin, getOrderById);
-router.patch("/:id/status", requireAdmin, updateOrderStatus);
-router.post("/:id/cancel", requireAdmin, cancelOrder);
 
+router.patch("/:id/status", requireAdmin, updateOrderStatus);
+router.patch("/:id/delivery-status", requireAdmin, updateOrderDeliveryStatus);
+
+router.post("/:id/cancel", requireAdmin, cancelOrder);
 
 export default router;
