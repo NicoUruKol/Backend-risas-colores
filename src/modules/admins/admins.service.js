@@ -1,4 +1,8 @@
 import bcrypt from "bcryptjs";
+
+/* ==============================
+Modelos
+============================== */
 import {
     createAdminDoc,
     findAdminByEmail,
@@ -8,6 +12,9 @@ import {
     updateAdminPasswordById,
 } from "./admins.model.js";
 
+/* ==============================
+Listar admins
+============================== */
 export async function listAdminsSafe() {
     const rows = await listAdmins();
 
@@ -21,6 +28,9 @@ export async function listAdminsSafe() {
     }));
 }
 
+/* ==============================
+Crear admin
+============================== */
 export async function createAdmin({ email, password, role }) {
     const e = String(email || "").trim().toLowerCase();
     const p = String(password || "");
@@ -61,6 +71,9 @@ export async function createAdmin({ email, password, role }) {
     };
 }
 
+/* ==============================
+Cambiar mi password
+============================== */
 export async function changeMyPassword({ adminId, currentPassword, newPassword }) {
     const cur = String(currentPassword || "");
     const next = String(newPassword || "");
@@ -97,6 +110,9 @@ export async function changeMyPassword({ adminId, currentPassword, newPassword }
     return { ok: true };
 }
 
+/* ==============================
+Desactivar admin
+============================== */
 export async function deactivateAdmin({ targetAdminId, actorAdminId }) {
     const targetId = String(targetAdminId || "").trim();
     const actorId = String(actorAdminId || "").trim();
@@ -121,6 +137,35 @@ export async function deactivateAdmin({ targetAdminId, actorAdminId }) {
     }
 
     const updated = await setAdminActive(targetId, false);
+
+    return {
+        id: updated.id,
+        email: updated.email,
+        role: updated.role,
+        active: updated.active !== false,
+    };
+}
+
+/* ==============================
+Reactivar admin
+============================== */
+export async function reactivateAdmin({ targetAdminId }) {
+    const targetId = String(targetAdminId || "").trim();
+
+    if (!targetId) {
+        const err = new Error("Falta id del admin");
+        err.statusCode = 400;
+        throw err;
+    }
+
+    const target = await getAdminById(targetId);
+    if (!target) {
+        const err = new Error("Admin no encontrado");
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const updated = await setAdminActive(targetId, true);
 
     return {
         id: updated.id,

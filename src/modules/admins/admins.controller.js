@@ -1,10 +1,17 @@
+/* ==============================
+Servicios
+============================== */
 import {
     createAdmin,
     listAdminsSafe,
     changeMyPassword,
     deactivateAdmin,
+    reactivateAdmin,
 } from "./admins.service.js";
 
+/* ==============================
+Listar admins
+============================== */
 export const listAdmins = async (req, res, next) => {
     try {
         const data = await listAdminsSafe();
@@ -14,6 +21,9 @@ export const listAdmins = async (req, res, next) => {
     }
 };
 
+/* ==============================
+Crear admin
+============================== */
 export const postAdmin = async (req, res, next) => {
     try {
         const { email, password, role } = req.body || {};
@@ -25,6 +35,9 @@ export const postAdmin = async (req, res, next) => {
     }
 };
 
+/* ==============================
+Cambiar mi password
+============================== */
 export const patchMyPassword = async (req, res, next) => {
     try {
         const adminId = req.admin?.adminId;
@@ -38,12 +51,30 @@ export const patchMyPassword = async (req, res, next) => {
     }
 };
 
+/* ==============================
+Desactivar admin
+============================== */
 export const patchDeactivateAdmin = async (req, res, next) => {
     try {
         const targetAdminId = req.params?.id;
         const actorAdminId = req.admin?.adminId;
 
         const data = await deactivateAdmin({ targetAdminId, actorAdminId });
+        return res.json({ ok: true, data });
+    } catch (e) {
+        const code = e?.statusCode || 500;
+        return res.status(code).json({ ok: false, message: e?.message || "Error interno" });
+    }
+};
+
+/* ==============================
+Reactivar admin
+============================== */
+export const patchReactivateAdmin = async (req, res, next) => {
+    try {
+        const targetAdminId = req.params?.id;
+
+        const data = await reactivateAdmin({ targetAdminId });
         return res.json({ ok: true, data });
     } catch (e) {
         const code = e?.statusCode || 500;
