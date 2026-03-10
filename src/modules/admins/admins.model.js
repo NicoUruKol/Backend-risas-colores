@@ -14,6 +14,16 @@ export async function findAdminByEmail(email) {
     return { id: doc.id, ...doc.data() };
 }
 
+export async function getAdminById(adminId) {
+    const id = String(adminId || "").trim();
+    if (!id) return null;
+
+    const doc = await db.collection(COL).doc(id).get();
+    if (!doc.exists) return null;
+
+    return { id: doc.id, ...doc.data() };
+}
+
 export async function listAdmins() {
     const snap = await db.collection(COL).orderBy("createdAt", "desc").get();
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -23,7 +33,7 @@ export async function createAdminDoc({ email, passHash, role = "admin", active =
     const e = String(email || "").trim().toLowerCase();
     const now = admin.firestore.FieldValue.serverTimestamp();
 
-    const ref = db.collection(COL).doc(); // id random
+    const ref = db.collection(COL).doc();
     await ref.set({
         email: e,
         passHash,
@@ -40,21 +50,43 @@ export async function createAdminDoc({ email, passHash, role = "admin", active =
 
 export async function updateAdminPasswordById(adminId, passHash) {
     const now = admin.firestore.FieldValue.serverTimestamp();
-    await db.collection(COL).doc(adminId).set(
-        { passHash, updatedAt: now },
+
+    await db.collection(COL).doc(String(adminId)).set(
+        {
+        passHash,
+        updatedAt: now,
+        },
         { merge: true }
     );
 }
 
 export async function updateLastLogin(adminId) {
     const now = admin.firestore.FieldValue.serverTimestamp();
-    await db.collection(COL).doc(adminId).set(
-        { lastLoginAt: now, updatedAt: now },
+
+    await db.collection(COL).doc(String(adminId)).set(
+        {
+        lastLoginAt: now,
+        updatedAt: now,
+        },
         { merge: true }
     );
 }
 
+export async function setAdminActive(adminId, active) {
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    await db.collection(COL).doc(String(adminId)).set(
+        {
+        active: active === true,
+        updatedAt: now,
+        },
+        { merge: true }
+    );
+
+    return getAdminById(adminId);
+}
+
 export async function countAdmins() {
     const snap = await db.collection(COL).limit(1).get();
-    return snap.size; // 0 o 1 (por el limit)
+    return snap.size;
 }

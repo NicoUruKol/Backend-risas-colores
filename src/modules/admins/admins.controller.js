@@ -1,5 +1,9 @@
-import { db } from "../../config/firebase.js";
-import { createAdmin, listAdminsSafe, changeMyPassword } from "./admins.service.js";
+import {
+    createAdmin,
+    listAdminsSafe,
+    changeMyPassword,
+    deactivateAdmin,
+} from "./admins.service.js";
 
 export const listAdmins = async (req, res, next) => {
     try {
@@ -26,13 +30,21 @@ export const patchMyPassword = async (req, res, next) => {
         const adminId = req.admin?.adminId;
         const { currentPassword, newPassword } = req.body || {};
 
-        const getAdminById = async (id) => {
-        const doc = await db.collection("admins").doc(String(id)).get();
-        return doc.exists ? { id: doc.id, ...doc.data() } : null;
-        };
-
-        await changeMyPassword({ adminId, currentPassword, newPassword, getAdminById });
+        await changeMyPassword({ adminId, currentPassword, newPassword });
         return res.json({ ok: true });
+    } catch (e) {
+        const code = e?.statusCode || 500;
+        return res.status(code).json({ ok: false, message: e?.message || "Error interno" });
+    }
+};
+
+export const patchDeactivateAdmin = async (req, res, next) => {
+    try {
+        const targetAdminId = req.params?.id;
+        const actorAdminId = req.admin?.adminId;
+
+        const data = await deactivateAdmin({ targetAdminId, actorAdminId });
+        return res.json({ ok: true, data });
     } catch (e) {
         const code = e?.statusCode || 500;
         return res.status(code).json({ ok: false, message: e?.message || "Error interno" });
