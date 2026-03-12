@@ -22,6 +22,7 @@ const ALLOWED_STATUS = new Set([
 
 const ALLOWED_DELIVERY_STATUS = new Set([
     "pending_delivery",
+    "ready_for_pickup",
     "delivered",
 ]);
 
@@ -42,6 +43,20 @@ const canSetDeliveryStatus = ({ orderStatus, currentDeliveryStatus, nextDelivery
 
     if (
         currentDeliveryStatus === "pending_delivery" &&
+        nextDeliveryStatus === "ready_for_pickup"
+    ) {
+        return true;
+    }
+
+    if (
+        currentDeliveryStatus === "ready_for_pickup" &&
+        nextDeliveryStatus === "pending_delivery"
+    ) {
+        return true;
+    }
+
+    if (
+        currentDeliveryStatus === "ready_for_pickup" &&
         nextDeliveryStatus === "delivered"
     ) {
         return true;
@@ -49,7 +64,7 @@ const canSetDeliveryStatus = ({ orderStatus, currentDeliveryStatus, nextDelivery
 
     if (
         currentDeliveryStatus === "delivered" &&
-        nextDeliveryStatus === "pending_delivery"
+        nextDeliveryStatus === "ready_for_pickup"
     ) {
         return true;
     }
@@ -281,6 +296,7 @@ export const create = async (payload) => {
             notifications: {
                 gardenPaidEmailSent: false,
                 familyPaidEmailSent: false,
+                readyForPickupEmailSent: false,
             },
         };
 
@@ -388,6 +404,9 @@ export const setStatus = async (id, nextStatus) => {
 /* ==============================
 Admin: set delivery status
 ============================== */
+/* ==============================
+Admin: set delivery status
+============================== */
 export const setDeliveryStatus = async (id, nextDeliveryStatus) => {
     const deliveryStatus = (nextDeliveryStatus ?? "").toString().trim();
 
@@ -426,9 +445,13 @@ export const setDeliveryStatus = async (id, nextDeliveryStatus) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
 
-        if (deliveryStatus === "delivered") {
+        if (deliveryStatus === "ready_for_pickup") {
+            patch.readyForPickupAt = admin.firestore.FieldValue.serverTimestamp();
+            patch.deliveredAt = null;
+        } else if (deliveryStatus === "delivered") {
             patch.deliveredAt = admin.firestore.FieldValue.serverTimestamp();
         } else {
+            patch.readyForPickupAt = null;
             patch.deliveredAt = null;
         }
 

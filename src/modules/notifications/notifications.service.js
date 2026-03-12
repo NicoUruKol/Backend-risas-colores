@@ -213,6 +213,45 @@ Gracias por confiar en Risas y Colores.
     return { subject, html, text };
 };
 
+const buildReadyForPickupEmail = (order) => {
+    const familyName = order?.family?.adultName || order?.customer?.name || "Familia";
+    const kidName = order?.family?.kidName || "tu peque";
+
+    const subject = `Tu pedido #${order.id} ya está listo para retirar`;
+
+    const html = `
+        <div style="font-family:Arial,sans-serif;color:#222;line-height:1.5;">
+            <h2>¡Hola, ${familyName}!</h2>
+            <p>Te avisamos que el pedido del uniforme de <b>${kidName}</b> ya está <b>listo para retirar</b>.</p>
+
+            <p><b>Número de pedido:</b> #${order.id}</p>
+
+            <div style="margin:18px 0;">
+                ${buildItemsHtml(order.items)}
+            </div>
+
+            <p>Si necesitás coordinar algo, podés responder este mail o comunicarte con el jardín.</p>
+            <p>Gracias por confiar en Risas y Colores 💛</p>
+        </div>
+    `;
+
+    const text = `
+¡Hola, ${familyName}!
+
+Te avisamos que el pedido del uniforme de ${kidName} ya está listo para retirar.
+
+Número de pedido: #${order.id}
+
+${buildItemsText(order.items)}
+
+Si necesitás coordinar algo, podés comunicarte con el jardín.
+
+Gracias por confiar en Risas y Colores.
+    `.trim();
+
+    return { subject, html, text };
+};
+
 /* ==============================
 Notification status
 ============================== */
@@ -268,4 +307,31 @@ export const sendPaidOrderNotifications = async (order) => {
 
         await markNotificationSent(order.id, "familyPaidEmailSent");
     }
+};
+
+export const sendReadyForPickupNotification = async (order) => {
+    if (!order?.id) return;
+
+    if (!hasEmailConfig()) {
+        console.warn("Email no configurado todavía. Se omite notificación de listo para retirar.");
+        return;
+    }
+
+    const alreadySent = Boolean(order?.notifications?.readyForPickupEmailSent);
+    const familyEmailAddress = normalize(order?.customer?.email);
+
+    if (alreadySent || !familyEmailAddress) {
+        return;
+    }
+
+    const readyEmail = buildReadyForPickupEmail(order);
+
+    await sendEmail({
+        to: familyEmailAddress,
+        subject: readyEmail.subject,
+        html: readyEmail.html,
+        text: readyEmail.text,
+    });
+
+    await markNotificationSent(order.id, "readyForPickupEmailSent");
 };

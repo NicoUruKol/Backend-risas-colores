@@ -1,4 +1,5 @@
 import * as ordersService from "./orders.service.js";
+import { sendReadyForPickupNotification } from "../notifications/notifications.service.js";
 
 /* ==============================
 Create order (public)
@@ -127,6 +128,51 @@ export const updateOrderDeliveryStatus = async (req, res, next) => {
         }
 
         return res.status(200).json({ ok: true, data: updated });
+    } catch (err) {
+        if (err.code === "VALIDATION_ERROR") {
+            return res.status(400).json({
+                ok: false,
+                code: err.code,
+                message: err.message,
+                details: err.details,
+            });
+        }
+
+        if (err.code === "INVALID_TRANSITION") {
+            return res.status(409).json({
+                ok: false,
+                code: err.code,
+                message: err.message,
+                details: err.details,
+            });
+        }
+
+        next(err);
+    }
+};
+
+/* ==============================
+Admin: ready for pickup + notify
+============================== */
+export const markOrderReadyForPickup = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const updated = await ordersService.setDeliveryStatus(id, "ready_for_pickup");
+
+        if (!updated) {
+            return res.status(404).json({ ok: false, message: "Orden no encontrada" });
+        }
+
+        try {
+            await sendReadyForPickupNotification(updated);
+        } catch (mailErr) {
+            console.error("Ready for pickup email error:", mailErr);
+        }
+
+        const fresh = await ordersService.getById(id);
+
+        return res.status(200).json({ ok: true, data: fresh });
     } catch (err) {
         if (err.code === "VALIDATION_ERROR") {
             return res.status(400).json({
