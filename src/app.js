@@ -23,6 +23,7 @@ const allowedOrigins = [
     "https://risas-colores.vercel.app",
     "https://risasycolores.com.ar",
     "https://www.risasycolores.com.ar",
+    "https://beta.risasycolores.com.ar",
 ];
 
 const corsMiddleware = cors({
