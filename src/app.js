@@ -32,13 +32,7 @@ const allowedOrigins = [
 const corsMiddleware = cors({
     origin: (origin, cb) => {
         if (!origin) return cb(null, true);
-
-        const isAllowed =
-            allowedOrigins.includes(origin) ||
-            origin.endsWith("risasycolores.com.ar");
-
-        if (isAllowed) return cb(null, true);
-
+        if (allowedOrigins.includes(origin)) return cb(null, true);
         return cb(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
