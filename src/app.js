@@ -17,19 +17,28 @@ import { errorHandler } from "./middlewares/error.middleware.js";
 
 const app = express();
 
+/* ==============================
+   CORS CONFIG (PRO)
+============================== */
+
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "https://risas-colores.vercel.app",
     "https://risasycolores.com.ar",
     "https://www.risasycolores.com.ar",
-    "https://beta.risasycolores.com.ar",
 ];
 
 const corsMiddleware = cors({
     origin: (origin, cb) => {
         if (!origin) return cb(null, true);
-        if (allowedOrigins.includes(origin)) return cb(null, true);
+
+        const isAllowed =
+            allowedOrigins.includes(origin) ||
+            origin.endsWith("risasycolores.com.ar");
+
+        if (isAllowed) return cb(null, true);
+
         return cb(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
@@ -40,6 +49,9 @@ const corsMiddleware = cors({
 app.use(corsMiddleware);
 app.options(/.*/, corsMiddleware);
 
+/* ==============================
+   MIDDLEWARES BASE
+============================== */
 
 app.use(express.json());
 
@@ -47,7 +59,11 @@ app.get("/", (req, res) => {
     res.status(200).send("✅ Backend Risas y Colores online. Usá /api/products");
 });
 
-// 🔐 Auth primero
+/* ==============================
+   ROUTES
+============================== */
+
+// 🔐 Auth
 app.use("/api/auth", authRouter);
 
 // 🔐 Admins
@@ -56,34 +72,44 @@ app.use("/api/admins", adminsRouter);
 // 🧺 Products
 app.use("/api/products", productsRouter);
 
-// 🧺 Compra
+// 🧺 Orders
 app.use("/api/orders", ordersRouter);
 
-// 🧪 Log
+// 💳 Payments
+app.use("/api/payments", paymentsRouter);
+
+// 📦 Stock
+app.use("/api/stock-movements", stockMovementsRouter);
+
+// 🖼️ Media
+app.use("/api/media", mediaRouter);
+
+// 🧩 Content
+app.use("/api/content", contentRouter);
+
+// ⭐ Reviews
+app.use("/api/reviews", googleReviewsRouter);
+
+/* ==============================
+   DEBUG LOG
+============================== */
+
 app.use((req, res, next) => {
     console.log("➡️", req.method, req.url);
     next();
 });
 
-// pagos
-app.use("/api/payments", paymentsRouter);
+/* ==============================
+   404
+============================== */
 
-// registra movimiento
-app.use("/api/stock-movements", stockMovementsRouter);
-
-// 🖼️ Media (Cloudinary) - Admin
-app.use("/api/media", mediaRouter);
-
-// 🧩 Content (Firestore) - Público + Admin
-app.use("/api/content", contentRouter);
-
-// Comentarios (Firestore) - Público + Admin
-app.use("/api/reviews", googleReviewsRouter);
-
-// ❌ 404
 app.use((req, res) => {
     res.status(404).json({ ok: false, message: "Ruta no encontrada" });
 });
+
+/* ==============================
+   ERROR HANDLER
+============================== */
 
 app.use(errorHandler);
 
