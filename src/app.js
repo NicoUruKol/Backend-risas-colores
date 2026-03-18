@@ -18,7 +18,7 @@ import { errorHandler } from "./middlewares/error.middleware.js";
 const app = express();
 
 /* ==============================
-   CORS CONFIG (PRO)
+   CORS CONFIG
 ============================== */
 
 const allowedOrigins = [
@@ -41,6 +41,15 @@ const corsMiddleware = cors({
     allowedHeaders: ["Content-Type", "Authorization"],
 });
 
+/* ==============================
+   FIX CACHE FOR DYNAMIC CORS
+============================== */
+
+app.use((req, res, next) => {
+    res.header("Vary", "Origin");
+    next();
+});
+
 app.use(corsMiddleware);
 app.options(/.*/, corsMiddleware);
 
@@ -49,6 +58,15 @@ app.options(/.*/, corsMiddleware);
 ============================== */
 
 app.use(express.json());
+
+/* ==============================
+   DEBUG LOG
+============================== */
+
+app.use((req, res, next) => {
+    console.log("➡️", req.method, req.url);
+    next();
+});
 
 app.get("/", (req, res) => {
     res.status(200).send("✅ Backend Risas y Colores online. Usá /api/products");
@@ -84,15 +102,6 @@ app.use("/api/content", contentRouter);
 
 // ⭐ Reviews
 app.use("/api/reviews", googleReviewsRouter);
-
-/* ==============================
-   DEBUG LOG
-============================== */
-
-app.use((req, res, next) => {
-    console.log("➡️", req.method, req.url);
-    next();
-});
 
 /* ==============================
    404
