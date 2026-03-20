@@ -183,16 +183,36 @@ export const create = async (payload) => {
         return { code, size, qty };
     });
 
+    /* ==============================
+    Consolidar items repetidos (mismo código+talle)
+    ============================== */
+    const groupedMap = new Map();
+
+    for (const it of normalized) {
+        const key = `${it.code}__${it.size}`;
+        const prev = groupedMap.get(key);
+
+        if (prev) {
+            prev.qty += it.qty;
+        } else {
+            groupedMap.set(key, { ...it });
+        }
+    }
+
+    const groupedItems = Array.from(groupedMap.values());
+
     const orderRef = db.collection(ORDERS_COL).doc();
 
-    /* ==============================
-    1) Transaction: validate + discount stock + create order + movements
-    ============================== */
     const baseOrder = await db.runTransaction(async (tx) => {
-        const computedItems = [];
         let total = 0;
+        const computedItems = [];
 
-        for (const it of normalized) {
+        /* ==============================
+        1) READS primero
+        ============================== */
+        const readResults = [];
+
+        for (const it of groupedItems) {
             const productRef = db.collection(PRODUCTS_COL).doc(it.code);
             const productSnap = await tx.get(productRef);
 
@@ -200,17 +220,20 @@ export const create = async (payload) => {
                 throw notFoundError("Producto no encontrado", { productCode: it.code });
             }
 
-            const product = productSnap.data();
+            const product = productSnap.data() || {};
 
-            if (product?.active !== true) {
+            if (product.active !== true) {
                 throw notFoundError("Producto inactivo o no disponible", { productCode: it.code });
             }
 
-            const variants = Array.isArray(product?.variants) ? product.variants : [];
+            const variants = Array.isArray(product.variants) ? product.variants : [];
             const vIndex = variants.findIndex((v) => normalizeSize(v?.size) === it.size);
 
             if (vIndex === -1) {
-                throw notFoundError("Talle no encontrado", { productCode: it.code, size: it.size });
+                throw notFoundError("Talle no encontrado", {
+                    productCode: it.code,
+                    size: it.size,
+                });
             }
 
             const variant = variants[vIndex];
@@ -218,7 +241,9 @@ export const create = async (payload) => {
             const unitPrice = Number(variant?.price ?? product?.price ?? 0);
 
             if (!isPositiveInt(it.qty)) {
-                throw validationError("Cantidad inválida", [{ productCode: it.code, size: it.size }]);
+                throw validationError("Cantidad inválida", [
+                    { productCode: it.code, size: it.size },
+                ]);
             }
 
             if (currentStock < it.qty) {
@@ -230,43 +255,77 @@ export const create = async (payload) => {
                 });
             }
 
+            readResults.push({
+                item: it,
+                productRef,
+                product,
+                variants,
+                vIndex,
+                currentStock,
+                unitPrice,
+            });
+        }
+
+        /* ==============================
+        2) Preparar datos en memoria
+        ============================== */
+        const stockWrites = [];
+        const movementWrites = [];
+
+        for (const row of readResults) {
+            const { item, productRef, product, variants, vIndex, currentStock, unitPrice } = row;
+
             const stockBefore = currentStock;
-            const stockAfter = currentStock - it.qty;
+            const stockAfter = currentStock - item.qty;
 
             const updatedVariants = variants.map((v, i) => {
                 if (i !== vIndex) return v;
                 return { ...v, stock: stockAfter };
             });
 
-            tx.update(productRef, { variants: updatedVariants });
+            stockWrites.push({
+                productRef,
+                updatedVariants,
+            });
 
-            const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
-            tx.set(movRef, {
+            movementWrites.push({
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 type: "order_create",
                 orderId: orderRef.id,
-                productCode: it.code,
-                size: it.size,
-                qtyDelta: -it.qty,
+                productCode: item.code,
+                size: item.size,
+                qtyDelta: -item.qty,
                 stockBefore,
                 stockAfter,
                 actor: "system",
             });
 
             const snapItem = {
-                code: it.code,
+                code: item.code,
                 name: product?.name ?? "",
                 avatar: product?.avatar ?? "",
                 category: product?.category ?? "",
                 season: product?.season ?? "",
-                size: it.size,
-                qty: it.qty,
+                size: item.size,
+                qty: item.qty,
                 unitPrice,
-                lineTotal: unitPrice * it.qty,
+                lineTotal: unitPrice * item.qty,
             };
 
             total += snapItem.lineTotal;
             computedItems.push(snapItem);
+        }
+
+        /* ==============================
+        3) WRITES recién al final
+        ============================== */
+        for (const write of stockWrites) {
+            tx.update(write.productRef, { variants: write.updatedVariants });
+        }
+
+        for (const mov of movementWrites) {
+            const movRef = db.collection(STOCK_MOVEMENTS_COL).doc();
+            tx.set(movRef, mov);
         }
 
         const orderDoc = {
@@ -334,9 +393,6 @@ export const create = async (payload) => {
         { merge: true }
     );
 
-    /* ==============================
-    4) Response to front
-    ============================== */
     return {
         id: baseOrder.id,
         status: "pending_payment",
