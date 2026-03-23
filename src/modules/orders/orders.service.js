@@ -131,6 +131,22 @@ export const createPaymentPreference = async (order) => {
         throw err;
     }
 
+    let successUrl;
+    let failureUrl;
+    let pendingUrl;
+    let webhookUrl;
+
+    try {
+        successUrl = new URL("/payment-success", frontUrl).toString();
+        failureUrl = new URL("/payment-failure", frontUrl).toString();
+        pendingUrl = new URL("/payment-pending", frontUrl).toString();
+        webhookUrl = new URL("/api/payments/webhook", publicUrl).toString();
+    } catch {
+        const err = new Error("FRONT_URL o PUBLIC_URL no son URLs válidas");
+        err.code = "PAYMENT_CONFIG_ERROR";
+        throw err;
+    }
+
     const preference = {
         items: order.items.map((item) => ({
             title: `${item.name} - Talle ${item.size}`,
@@ -139,14 +155,25 @@ export const createPaymentPreference = async (order) => {
             unit_price: item.unitPrice,
         })),
         external_reference: order.id,
-        notification_url: `${publicUrl}/api/payments/webhook`,
+        notification_url: webhookUrl,
         back_urls: {
-            success: `${frontUrl}/payment-success`,
-            failure: `${frontUrl}/payment-failure`,
-            pending: `${frontUrl}/payment-pending`,
+            success: successUrl,
+            failure: failureUrl,
+            pending: pendingUrl,
         },
         auto_return: "approved",
     };
+
+    console.log("MP URLS =>", {
+        publicUrl,
+        frontUrl,
+        successUrl,
+        failureUrl,
+        pendingUrl,
+        webhookUrl,
+    });
+
+    console.log("MP preference body =>", preference);
 
     const response = await mpPreference.create({ body: preference });
     return response;
