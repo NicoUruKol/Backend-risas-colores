@@ -114,9 +114,13 @@ Create Payment Preference (MP)
 export const createPaymentPreference = async (order) => {
     const missingEnv = [];
 
-    if (!process.env.MP_ACCESS_TOKEN) missingEnv.push("MP_ACCESS_TOKEN");
-    if (!process.env.PUBLIC_URL) missingEnv.push("PUBLIC_URL");
-    if (!process.env.FRONT_URL) missingEnv.push("FRONT_URL");
+    const mpAccessToken = String(process.env.MP_ACCESS_TOKEN || "").trim();
+    const publicUrl = String(process.env.PUBLIC_URL || "").trim().replace(/\/+$/, "");
+    const frontUrl = String(process.env.FRONT_URL || "").trim().replace(/\/+$/, "");
+
+    if (!mpAccessToken) missingEnv.push("MP_ACCESS_TOKEN");
+    if (!publicUrl) missingEnv.push("PUBLIC_URL");
+    if (!frontUrl) missingEnv.push("FRONT_URL");
 
     if (missingEnv.length > 0) {
         const err = new Error(
@@ -135,11 +139,11 @@ export const createPaymentPreference = async (order) => {
             unit_price: item.unitPrice,
         })),
         external_reference: order.id,
-        notification_url: `${process.env.PUBLIC_URL}/api/payments/webhook`,
+        notification_url: `${publicUrl}/api/payments/webhook`,
         back_urls: {
-            success: `${process.env.FRONT_URL}/payment-success`,
-            failure: `${process.env.FRONT_URL}/payment-failure`,
-            pending: `${process.env.FRONT_URL}/payment-pending`,
+            success: `${frontUrl}/payment-success`,
+            failure: `${frontUrl}/payment-failure`,
+            pending: `${frontUrl}/payment-pending`,
         },
         auto_return: "approved",
     };
