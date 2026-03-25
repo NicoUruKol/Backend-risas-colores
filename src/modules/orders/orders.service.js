@@ -147,14 +147,58 @@ export const createPaymentPreference = async (order) => {
         throw err;
     }
 
-    const preference = {
-        items: order.items.map((item) => ({
-            title: `${item.name} - Talle ${item.size}`,
-            quantity: item.qty,
+    if (!order?.id) {
+        const err = new Error("La orden no tiene id");
+        err.code = "PAYMENT_ORDER_INVALID";
+        throw err;
+    }
+
+    if (!Array.isArray(order?.items) || order.items.length === 0) {
+        const err = new Error("La orden no tiene items válidos para generar la preferencia");
+        err.code = "PAYMENT_ORDER_INVALID";
+        throw err;
+    }
+
+    const normalizedItems = order.items.map((item, index) => {
+        const quantity = Number(item?.qty);
+        const unitPrice = Number(item?.unitPrice);
+        const name = String(item?.name || "").trim();
+        const sizeRaw = String(item?.size || "").trim();
+        const sizeLabel = sizeRaw || "Único";
+
+        if (!name) {
+            const err = new Error(`El item ${index + 1} no tiene nombre`);
+            err.code = "PAYMENT_ITEM_INVALID";
+            throw err;
+        }
+
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+            const err = new Error(
+                `El item "${name}" tiene una cantidad inválida: ${item?.qty}`
+            );
+            err.code = "PAYMENT_ITEM_INVALID";
+            throw err;
+        }
+
+        if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+            const err = new Error(
+                `El item "${name}" tiene un precio inválido: ${item?.unitPrice}`
+            );
+            err.code = "PAYMENT_ITEM_INVALID";
+            throw err;
+        }
+
+        return {
+            title: `${name} - Talle ${sizeLabel}`,
+            quantity,
             currency_id: "ARS",
-            unit_price: item.unitPrice,
-        })),
-        external_reference: order.id,
+            unit_price: Number(unitPrice.toFixed(2)),
+        };
+    });
+
+    const preference = {
+        items: normalizedItems,
+        external_reference: String(order.id),
         notification_url: webhookUrl,
         back_urls: {
             success: successUrl,
@@ -173,10 +217,22 @@ export const createPaymentPreference = async (order) => {
         webhookUrl,
     });
 
+    console.log("MP order raw =>", order);
     console.log("MP preference body =>", preference);
 
-    const response = await mpPreference.create({ body: preference });
-    return response;
+    try {
+        const response = await mpPreference.create({ body: preference });
+        console.log("MP preference response =>", response);
+        return response;
+    } catch (error) {
+        console.error("MP create preference error =>", {
+            message: error?.message,
+            status: error?.status,
+            cause: error?.cause,
+            response: error?.response,
+        });
+        throw error;
+    }
 };
 
 /* ==============================
