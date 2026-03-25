@@ -196,17 +196,25 @@ export const createPaymentPreference = async (order) => {
         };
     });
 
+    console.log("MP FINAL ITEMS =>", normalizedItems);
+    console.log("MP PAYER =>", order.customer);
     const preference = {
-        items: normalizedItems,
-        external_reference: String(order.id),
-        notification_url: webhookUrl,
-        back_urls: {
-            success: successUrl,
-            failure: failureUrl,
-            pending: pendingUrl,
-        },
-        auto_return: "approved",
-    };
+    items: normalizedItems,
+
+    payer: {
+        name: order.customer?.name || "Comprador Test",
+        email: order.customer?.email || "test@test.com",
+    },
+
+    external_reference: String(order.id),
+    notification_url: webhookUrl,
+    back_urls: {
+        success: successUrl,
+        failure: failureUrl,
+        pending: pendingUrl,
+    },
+    auto_return: "approved",
+};
 
     console.log("MP URLS =>", {
         publicUrl,
@@ -463,6 +471,7 @@ export const create = async (payload) => {
     const payment = await createPaymentPreference({
         id: baseOrder.id,
         items: baseOrder.items,
+        customer: payload.customer,
     });
 
     /* ==============================
