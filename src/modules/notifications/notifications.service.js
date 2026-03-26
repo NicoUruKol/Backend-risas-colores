@@ -176,11 +176,13 @@ const buildFamilyPaidEmail = (order) => {
 
     const html = `
         <div style="font-family:Arial,sans-serif;color:#222;line-height:1.5;">
-            <h2>¡Gracias por tu compra, ${familyName}!</h2>
-            <p>Tu pago fue aprobado correctamente y ya registramos el pedido del uniforme de <b>${kidName}</b>.</p>
+            <h2>¡Gracias por tu compra, ${familyName}! 🎉</h2>
+
+            <p>
+                Tu pago fue aprobado correctamente y ya registramos el pedido del uniforme de <b>${kidName}</b>.
+            </p>
 
             <p><b>Número de pedido:</b> #${order.id}</p>
-            <p><b>Estado del pedido:</b> ${order.status}</p>
 
             <div style="margin:18px 0;">
                 ${buildItemsHtml(order.items)}
@@ -188,27 +190,65 @@ const buildFamilyPaidEmail = (order) => {
 
             <p style="font-size:16px;"><b>Total abonado:</b> $${total}</p>
 
-            <p>Pronto nos pondremos en contacto si hiciera falta confirmar algún detalle o coordinar la entrega.</p>
-            <p>Gracias por confiar en Risas y Colores 💛</p>
+            <p>
+                Para coordinar la entrega o hacer cualquier consulta, escribinos por 
+                <b>WhatsApp</b> 👇
+            </p>
+
+            <!-- Botón WhatsApp -->
+            <div style="margin:20px 0;">
+                <a
+                href="https://wa.me/5491156971231?text=Hola%20Risas%20y%20Colores%20%F0%9F%8C%88%0ARealic%C3%A9%20el%20pago%20del%20pedido%20%23${order.id}%20del%20uniforme%20de%20${kidName}%20y%20quer%C3%ADa%20coordinar%20la%20entrega."
+                target="_blank"
+                rel="noopener noreferrer"
+                style="
+                    display:inline-flex;
+                    align-items:center;
+                    gap:10px;
+                    background:#25D366;
+                    color:#fff;
+                    text-decoration:none;
+                    padding:10px 16px;
+                    border-radius:999px;
+                    font-weight:600;
+                "
+                >
+                <img 
+                    src="https://cdn-icons-png.flaticon.com/512/733/733585.png" 
+                    alt="WhatsApp"
+                    style="width:20px;height:20px;"
+                />
+                Escribir por WhatsApp
+                </a>
+            </div>
+
+            <p style="font-size:14px;color:#666;">
+                Este es un mensaje automático, por favor no respondas a este correo.
+            </p>
+
+            <p>
+                Gracias por confiar en Risas y Colores 🌈
+            </p>
         </div>
-    `;
-
+        `;
     const text = `
-¡Gracias por tu compra, ${familyName}!
+        ¡Gracias por tu compra, ${familyName}! 🎉
 
-Tu pago fue aprobado correctamente y ya registramos el pedido del uniforme de ${kidName}.
+        Tu pago fue aprobado correctamente y ya registramos el pedido del uniforme de ${kidName}.
 
-Número de pedido: #${order.id}
-Estado del pedido: ${order.status}
+        Número de pedido: #${order.id}
 
-${buildItemsText(order.items)}
+        ${buildItemsText(order.items)}
 
-Total abonado: $${total}
+        Total abonado: $${total}
 
-Pronto nos pondremos en contacto si hiciera falta confirmar algún detalle o coordinar la entrega.
+        Para coordinar la entrega o hacer cualquier consulta, escribinos por WhatsApp:
+        https://wa.me/5491156971231?text=Hola%20Risas%20y%20Colores%20%F0%9F%8C%88%0ARealic%C3%A9%20el%20pago%20del%20pedido%20%23${order.id}%20del%20uniforme%20de%20${kidName}%20y%20quer%C3%ADa%20coordinar%20la%20entrega.
 
-Gracias por confiar en Risas y Colores.
-    `.trim();
+        Este es un mensaje automático, por favor no respondas a este correo.
+
+        Gracias por confiar en Risas y Colores 🌈
+        `.trim();
 
     return { subject, html, text };
 };
@@ -222,7 +262,11 @@ const buildReadyForPickupEmail = (order) => {
     const html = `
         <div style="font-family:Arial,sans-serif;color:#222;line-height:1.5;">
             <h2>¡Hola, ${familyName}!</h2>
-            <p>Te avisamos que el pedido del uniforme de <b>${kidName}</b> ya está <b>listo para retirar</b>.</p>
+
+            <p>
+                Te avisamos que el pedido del uniforme de <b>${kidName}</b> ya está 
+                <b>listo para retirar</b>.
+            </p>
 
             <p><b>Número de pedido:</b> #${order.id}</p>
 
@@ -230,24 +274,64 @@ const buildReadyForPickupEmail = (order) => {
                 ${buildItemsHtml(order.items)}
             </div>
 
-            <p>Si necesitás coordinar algo, podés responder este mail o comunicarte con el jardín.</p>
-            <p>Gracias por confiar en Risas y Colores 💛</p>
+            <p>
+                Para coordinar el retiro o hacer cualquier consulta, escribinos por 
+                <b>WhatsApp</b> 👇
+            </p>
+
+            <!-- Botón WhatsApp -->
+            <div style="margin:20px 0;">
+                <a
+                href="https://wa.me/5491156971231?text=Hola%20Risas%20y%20Colores%20%F0%9F%8C%88%0AEstoy%20consultando%20por%20el%20pedido%20%23${order.id}%20del%20uniforme%20de%20${kidName}."
+                target="_blank"
+                rel="noopener noreferrer"
+                style="
+                    display:inline-flex;
+                    align-items:center;
+                    gap:10px;
+                    background:#25D366;
+                    color:#fff;
+                    text-decoration:none;
+                    padding:10px 16px;
+                    border-radius:999px;
+                    font-weight:600;
+                "
+                >
+                <img 
+                    src="https://cdn-icons-png.flaticon.com/512/733/733585.png" 
+                    alt="WhatsApp"
+                    style="width:20px;height:20px;"
+                />
+                Escribir por WhatsApp
+                </a>
+            </div>
+
+            <p style="font-size:14px;color:#666;">
+                Este es un mensaje automático, por favor no respondas a este correo.
+            </p>
+
+            <p>
+                Gracias por confiar en Risas y Colores 🌈
+            </p>
         </div>
     `;
 
     const text = `
-¡Hola, ${familyName}!
+        ¡Hola, ${familyName}!
 
-Te avisamos que el pedido del uniforme de ${kidName} ya está listo para retirar.
+        Te avisamos que el pedido del uniforme de ${kidName} ya está listo para retirar.
 
-Número de pedido: #${order.id}
+        Número de pedido: #${order.id}
 
-${buildItemsText(order.items)}
+        ${buildItemsText(order.items)}
 
-Si necesitás coordinar algo, podés comunicarte con el jardín.
+        Para coordinar el retiro o hacer cualquier consulta, escribinos por WhatsApp:
+        https://wa.me/5491156971231?text=Hola%20Risas%20y%20Colores%20%F0%9F%8C%88%0AEstoy%20consultando%20por%20el%20pedido%20%23${order.id}%20del%20uniforme%20de%20${kidName}.
 
-Gracias por confiar en Risas y Colores.
-    `.trim();
+        Este es un mensaje automático, por favor no respondas a este correo.
+
+        Gracias por confiar en Risas y Colores 🌈
+        `.trim();
 
     return { subject, html, text };
 };
