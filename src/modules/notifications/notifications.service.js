@@ -1,5 +1,11 @@
 import admin from "firebase-admin";
 import { db } from "../../config/firebase.js";
+import {
+    buildWhatsAppLink,
+    buildWhatsAppButton,
+    emailFooterHTML,
+    emailFooterText,
+} from "../notifications/emailHelpers.js";
 
 /* ==============================
 Config
@@ -171,6 +177,11 @@ const buildFamilyPaidEmail = (order) => {
     const familyName = order?.family?.adultName || order?.customer?.name || "Familia";
     const kidName = order?.family?.kidName || "tu peque";
     const total = money(order?.total);
+    const waLink = buildWhatsAppLink({
+        orderId: order.id,
+        kidName,
+        type: "paid",
+    });
 
     const subject = `Confirmación de tu pedido #${order.id}`;
 
@@ -195,42 +206,12 @@ const buildFamilyPaidEmail = (order) => {
                 <b>WhatsApp</b> 👇
             </p>
 
-            <!-- Botón WhatsApp -->
-            <div style="margin:20px 0;">
-                <a
-                href="https://wa.me/5491156971231?text=Hola%20Risas%20y%20Colores%20%F0%9F%8C%88%0ARealic%C3%A9%20el%20pago%20del%20pedido%20%23${order.id}%20del%20uniforme%20de%20${kidName}%20y%20quer%C3%ADa%20coordinar%20la%20entrega."
-                target="_blank"
-                rel="noopener noreferrer"
-                style="
-                    display:inline-flex;
-                    align-items:center;
-                    gap:10px;
-                    background:#25D366;
-                    color:#fff;
-                    text-decoration:none;
-                    padding:10px 16px;
-                    border-radius:999px;
-                    font-weight:600;
-                "
-                >
-                <img 
-                    src="https://cdn-icons-png.flaticon.com/512/733/733585.png" 
-                    alt="WhatsApp"
-                    style="width:20px;height:20px;"
-                />
-                Escribir por WhatsApp
-                </a>
-            </div>
+            ${buildWhatsAppButton(waLink)}
 
-            <p style="font-size:14px;color:#666;">
-                Este es un mensaje automático, por favor no respondas a este correo.
-            </p>
-
-            <p>
-                Gracias por confiar en Risas y Colores 🌈
-            </p>
+            ${emailFooterHTML()}
         </div>
-        `;
+    `;
+
     const text = `
         ¡Gracias por tu compra, ${familyName}! 🎉
 
@@ -243,19 +224,22 @@ const buildFamilyPaidEmail = (order) => {
         Total abonado: $${total}
 
         Para coordinar la entrega o hacer cualquier consulta, escribinos por WhatsApp:
-        https://wa.me/5491156971231?text=Hola%20Risas%20y%20Colores%20%F0%9F%8C%88%0ARealic%C3%A9%20el%20pago%20del%20pedido%20%23${order.id}%20del%20uniforme%20de%20${kidName}%20y%20quer%C3%ADa%20coordinar%20la%20entrega.
+        ${waLink}
 
-        Este es un mensaje automático, por favor no respondas a este correo.
+        ${emailFooterText()}
+            `.trim();
 
-        Gracias por confiar en Risas y Colores 🌈
-        `.trim();
-
-    return { subject, html, text };
-};
+            return { subject, html, text };
+    };
 
 const buildReadyForPickupEmail = (order) => {
     const familyName = order?.family?.adultName || order?.customer?.name || "Familia";
     const kidName = order?.family?.kidName || "tu peque";
+    const waLink = buildWhatsAppLink({
+        orderId: order.id,
+        kidName,
+        type: "ready",
+    });
 
     const subject = `Tu pedido #${order.id} ya está listo para retirar`;
 
@@ -279,40 +263,9 @@ const buildReadyForPickupEmail = (order) => {
                 <b>WhatsApp</b> 👇
             </p>
 
-            <!-- Botón WhatsApp -->
-            <div style="margin:20px 0;">
-                <a
-                href="https://wa.me/5491156971231?text=Hola%20Risas%20y%20Colores%20%F0%9F%8C%88%0AEstoy%20consultando%20por%20el%20pedido%20%23${order.id}%20del%20uniforme%20de%20${kidName}."
-                target="_blank"
-                rel="noopener noreferrer"
-                style="
-                    display:inline-flex;
-                    align-items:center;
-                    gap:10px;
-                    background:#25D366;
-                    color:#fff;
-                    text-decoration:none;
-                    padding:10px 16px;
-                    border-radius:999px;
-                    font-weight:600;
-                "
-                >
-                <img 
-                    src="https://cdn-icons-png.flaticon.com/512/733/733585.png" 
-                    alt="WhatsApp"
-                    style="width:20px;height:20px;"
-                />
-                Escribir por WhatsApp
-                </a>
-            </div>
+            ${buildWhatsAppButton(waLink)}
 
-            <p style="font-size:14px;color:#666;">
-                Este es un mensaje automático, por favor no respondas a este correo.
-            </p>
-
-            <p>
-                Gracias por confiar en Risas y Colores 🌈
-            </p>
+            ${emailFooterHTML()}
         </div>
     `;
 
@@ -326,15 +279,13 @@ const buildReadyForPickupEmail = (order) => {
         ${buildItemsText(order.items)}
 
         Para coordinar el retiro o hacer cualquier consulta, escribinos por WhatsApp:
-        https://wa.me/5491156971231?text=Hola%20Risas%20y%20Colores%20%F0%9F%8C%88%0AEstoy%20consultando%20por%20el%20pedido%20%23${order.id}%20del%20uniforme%20de%20${kidName}.
+        ${waLink}
 
-        Este es un mensaje automático, por favor no respondas a este correo.
+        ${emailFooterText()}
+            `.trim();
 
-        Gracias por confiar en Risas y Colores 🌈
-        `.trim();
-
-    return { subject, html, text };
-};
+            return { subject, html, text };
+    };
 
 /* ==============================
 Notification status
