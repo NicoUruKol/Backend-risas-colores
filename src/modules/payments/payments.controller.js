@@ -99,20 +99,15 @@ export const mercadoPagoWebhook = async (req, res) => {
         }
 
         /* ==============================
-        Rejected / cancelled => cancel + restock
+        Rejected / cancelled => guardar estado MP, pero NO cancelar
         ============================== */
         if (mpStatus === "rejected" || mpStatus === "cancelled") {
-            if (order.status !== "cancelled") {
-                await ordersService.cancel(orderId);
-            }
-
             await db.collection(ORDERS_COL).doc(orderId).set(
                 {
                     mp: {
                         ...(order.mp || {}),
                         paymentId,
                         status: mpStatus,
-                        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
                         lastWebhookAt: admin.firestore.FieldValue.serverTimestamp(),
                     },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
