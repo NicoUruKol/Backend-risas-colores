@@ -196,8 +196,6 @@ export const createPaymentPreference = async (order) => {
         };
     });
 
-    console.log("MP FINAL ITEMS =>", normalizedItems);
-    console.log("MP PAYER =>", order.customer);
     const preference = {
     items: normalizedItems,
 
@@ -224,9 +222,6 @@ export const createPaymentPreference = async (order) => {
         pendingUrl,
         webhookUrl,
     });
-
-    console.log("MP order raw =>", order);
-    console.log("MP preference body =>", preference);
 
     try {
         const response = await mpPreference.create({ body: preference });

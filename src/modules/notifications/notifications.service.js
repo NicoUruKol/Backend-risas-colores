@@ -258,12 +258,11 @@ Notification status
 const markNotificationSent = async (orderId, key) => {
     const patch = {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        [`notifications.${key}`]: true,
+        [`notifications.${key}At`]: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    patch[`notifications.${key}`] = true;
-    patch[`notifications.${key}At`] = admin.firestore.FieldValue.serverTimestamp();
-
-    await db.collection(ORDERS_COL).doc(orderId).set(patch, { merge: true });
+    await db.collection(ORDERS_COL).doc(orderId).update(patch);
 };
 
 /* ==============================
