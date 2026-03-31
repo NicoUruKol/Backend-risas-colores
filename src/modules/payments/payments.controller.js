@@ -95,6 +95,30 @@ export const mercadoPagoWebhook = async (req, res) => {
                 console.error("Error enviando mails del pedido pago:", mailErr);
             }
 
+            /* ==============================
+            Crear movimientos de venta real (order_paid)
+            ============================== */
+            try {
+                const items = Array.isArray(finalOrder?.items) ? finalOrder.items : [];
+
+                for (const item of items) {
+                    const movRef = db.collection("stock_movements").doc();
+
+                    await movRef.set({
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                        type: "order_paid",
+                        orderId: orderId,
+                        productCode: item.code,
+                        size: item.size,
+                        qtyDelta: 0, // ⚠️ NO toca stock
+                        actor: "system",
+                        reason: "Venta confirmada (pago aprobado)",
+                    });
+                }
+            } catch (e) {
+                console.error("Error creando movimientos order_paid:", e);
+            }
+
             return res.sendStatus(200);
         }
 
